@@ -1,0 +1,10 @@
+{
+  "name": "Eggers Kick Off",
+  "short_name": "Kick Off",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#4fb3f6",
+  "theme_color": "#047dc3",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

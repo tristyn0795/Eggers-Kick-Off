@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Eggers Kick Off</title>
+  <meta name="description" content="Help Jason boot the ball to the Click Wise Design office — and beyond. Time your kick, hit the targets, climb the leaderboard." />
+  <meta name="theme-color" content="#047dc3" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <canvas id="game" aria-label="Eggers Kick Off game field"></canvas>
+  <div id="fade"></div>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <button id="hudMenu" class="ui hud-btn" title="Menu" aria-label="Menu">☰</button>
+      <div class="hud-pill" id="pillKick"><span class="lbl">KICK</span><b id="hudKick">1/10</b></div>
+      <div class="hud-pill" id="pillScore"><span class="lbl">SCORE</span><b id="hudScore">0</b></div>
+      <div class="hud-pill hidden" id="pillBeat"><span class="lbl">TO BEAT</span><b id="hudBeat">0</b></div>
+      <div class="hud-pill hidden" id="pillReplay"><span class="lbl">REPLAY</span><b id="hudReplay"></b></div>
+      <div class="hud-pill"><span class="lbl">WIND</span><b id="hudWind">0</b></div>
+      <button id="hudMute" class="ui hud-btn" title="Sound" aria-label="Toggle sound">🔊</button>
+    </div>
+    <div id="track"><div id="trackFill"></div><div id="trackMarks"></div><div id="trackBall">⚽</div></div>
+    <div id="distance" class="hidden">0 m</div>
+    <div id="hint"></div>
+    <div id="ffHint" class="hidden">Tap to fast-forward ⏩</div>
+    <div id="result" class="hidden">
+      <div class="res-label" id="resLabel"></div>
+      <div class="res-dist" id="resDist"></div>
+      <div class="res-target hidden" id="resTarget"></div>
+      <div class="res-points" id="resPoints"></div>
+      <div class="res-sub" id="resSub"></div>
+      <div class="res-tap">tap to continue</div>
+    </div>
+  </div>
+
+  <aside id="roomPanel" class="ui hidden" aria-live="polite"></aside>
+  <div id="feed" class="ui" aria-live="polite"></div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <!-- Main menu -->
+  <section id="screen-menu" class="screen ui">
+    <div class="menu-card">
+      <div class="logo"><span>EGGERS</span><span>KICK OFF</span></div>
+      <p class="tagline">Help Jason boot the ball to the <b>Click Wise Design</b> office&nbsp;— and way beyond.</p>
+      <button class="profile-chip" id="menuProfile" data-action="profile"></button>
+      <div class="menu-buttons">
+        <button data-action="ranked" class="big primary">⚽ Play Online<small>Ranked 10-kick round · leaderboard</small></button>
+        <button data-action="rooms" class="big green">👥 Multiplayer Room<small>Play live against friends</small></button>
+        <div class="row">
+          <button data-action="casual">🌤️ Casual Round<small>Offline</small></button>
+          <button data-action="freekick">♾️ Free Kick<small>Offline practice</small></button>
+        </div>
+        <div class="row">
+          <button data-action="shop">🛒 Locker &amp; Shop</button>
+          <button data-action="leaderboard">🏆 Leaderboard</button>
+        </div>
+        <button data-action="howto" class="link">How to play</button>
+      </div>
+      <div id="onlineStatus" class="status"></div>
+    </div>
+  </section>
+
+  <!-- Name / sign-in -->
+  <section id="screen-name" class="screen ui hidden">
+    <div class="card narrow">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>Pick your kicker name</h2>
+      <p class="muted">This is how you'll show up on the leaderboard.</p>
+      <form id="nameForm">
+        <input id="nameInput" maxlength="16" autocomplete="nickname" placeholder="e.g. Golden Boot Gary" required />
+        <button class="primary" type="submit">Let's kick!</button>
+      </form>
+      <p class="error" id="nameError"></p>
+      <details>
+        <summary>Already played on another device?</summary>
+        <form id="transferForm" class="inline">
+          <input id="transferInput" placeholder="Paste your transfer code" autocomplete="off" />
+          <button type="submit">Restore</button>
+        </form>
+      </details>
+    </div>
+  </section>
+
+  <!-- Shop -->
+  <section id="screen-shop" class="screen ui hidden">
+    <div class="card wide">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>Locker &amp; Shop</h2>
+      <div class="profile-tabs" id="shopProfileTabs"></div>
+      <div class="shop-head" id="shopHead"></div>
+      <div class="tabs" id="shopTabs">
+        <button data-tab="upgrades" class="active">Upgrades</button>
+        <button data-tab="outfit">Outfits</button>
+        <button data-tab="ball">Balls</button>
+        <button data-tab="trail">Trails</button>
+      </div>
+      <div class="grid" id="shopGrid"></div>
+    </div>
+  </section>
+
+  <!-- Leaderboard -->
+  <section id="screen-leaderboard" class="screen ui hidden">
+    <div class="card wide">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>🏆 Top Kickers</h2>
+      <div class="tabs" id="lbTabs">
+        <button data-type="round" class="active">Best Round</button>
+        <button data-type="week">This Week</button>
+        <button data-type="kick">Longest Kick</button>
+      </div>
+      <div id="lbMine" class="muted"></div>
+      <div class="table-wrap"><table id="lbTable"></table></div>
+    </div>
+  </section>
+
+  <!-- Rooms -->
+  <section id="screen-rooms" class="screen ui hidden">
+    <div class="card wide">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>👥 Multiplayer Room</h2>
+      <div id="roomBody"></div>
+    </div>
+  </section>
+
+  <!-- How to play -->
+  <section id="screen-howto" class="screen ui hidden">
+    <div class="card">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>How to play</h2>
+      <ol class="howto">
+        <li><b>Watch Jason juggle.</b> The ball pops off his knee to a different height every time.</li>
+        <li><b>Click, tap or press any key</b> to swing. His foot meets the ball a split-second later, so time it early.</li>
+        <li><b>Strike in the green sweet spot</b> (chest–head height) for a <b>PERFECT</b> kick. A great first bounce lands around 900&nbsp;m.</li>
+        <li>Too high and Jason <b>whiffs</b>. Hitting it low sends a weak line drive.</li>
+        <li><b>Bounce pads</b> launch the ball further. <b>Puddles</b> stop it dead. Watch the wind.</li>
+      </ol>
+      <h3>Scoring — Topgolf style</h3>
+      <ul class="howto">
+        <li>Every 10&nbsp;m the ball travels = <b>1 point</b>.</li>
+        <li>Stop the ball inside a <b>target</b> for bonus points: outer ring ×1, inner ring ×2, <b>bullseye ×3</b>.</li>
+        <li>The <b>Click Wise Design Office</b> sits at 4,000&nbsp;m (250&nbsp;pts). The field keeps going: Downtown, the Airport, Mountain Peak, the Satellite Dish…</li>
+        <li>A round is <b>10 kicks</b>, and the <b>last ball scores double</b>.</li>
+      </ul>
+      <h3>Progression</h3>
+      <ul class="howto">
+        <li>Earn <b>coins</b> and <b>XP</b> every round. Level up to unlock new gear.</li>
+        <li>Spend coins on upgrades (power, bounce, sweet spot, slow-mo…) and on outfits, balls and trails.</li>
+        <li><b>Online</b> progress is saved to your kicker name. <b>Offline</b> modes keep their own local progress on this device.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Profile -->
+  <section id="screen-profile" class="screen ui hidden">
+    <div class="card">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>👤 Profile</h2>
+      <div id="profileBody"></div>
+    </div>
+  </section>
+
+  <!-- Round end -->
+  <section id="screen-end" class="screen ui hidden">
+    <div class="card">
+      <div id="endBody"></div>
+    </div>
+  </section>
+
+  <!-- Generic modal -->
+  <section id="screen-modal" class="screen ui hidden">
+    <div class="card narrow">
+      <div id="modalBody"></div>
+    </div>
+  </section>
+
+  <noscript>Eggers Kick Off needs JavaScript to run.</noscript>
+
+  <script src="/shared/physics.js"></script>
+  <script src="/shared/catalog.js"></script>
+  <script src="/js/audio.js"></script>
+  <script src="/js/render.js"></script>
+  <script src="/js/game.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

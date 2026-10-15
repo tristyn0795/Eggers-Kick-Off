@@ -1,0 +1,1068 @@
+/* Eggers Kick Off — UI, profiles, networking and multiplayer. */
+(function () {
+  'use strict';
+  const P = window.EKPhysics;
+  const C = window.EKCatalog;
+  const EK = window.EK;
+  const sfx = EK.sfx;
+
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (n) => Math.round(n || 0).toLocaleString();
+  const fmtM = (n) => `${Math.floor(n || 0).toLocaleString()} m`;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const local = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage unavailable */ } },
+  };
+
+  const S = {
+    online: false,
+    token: local.get('ek_token', null),
+    player: null,
+    ranks: null,
+    offline: Object.assign(C.newProfile(), local.get('ek_offline', {})),
+    shopProfile: null,
+    ws: null,
+    wsOk: false,
+    wsBackoff: 1000,
+    onlineCount: 0,
+    room: null,
+    roomChat: [],
+    roomFinal: null,
+    wantRoom: null,
+    current: null,
+    lbType: 'round',
+    shopTab: 'upgrades',
+    pendingAfterName: null,
+    screen: 'menu',
+  };
+
+  function saveOffline() { local.set('ek_offline', S.offline); }
+
+  // -------------------------------------------------------------------------
+  // HUD
+  // -------------------------------------------------------------------------
+  const hud = {
+    last: {},
+    range: 0,
+    show(mode, opts) {
+      opts = opts || {};
+      $('#hud').classList.remove('hidden');
+      $('#pillKick').classList.toggle('hidden', mode === 'replay');
+      $('#pillScore').classList.toggle('hidden', mode === 'replay');
+      $('#pillReplay').classList.toggle('hidden', mode !== 'replay');
+      $('#hudReplay').textContent = opts.replay || '';
+      $('#pillBeat').classList.toggle('hidden', !opts.beat);
+      $('#hudBeat').textContent = opts.beat ? fmt(opts.beat) : '';
+      $('#hudMute').textContent = sfx.muted ? '🔇' : '🔊';
+      this.last = {};
+      this.range = 0;
+      this.hideResult();
+    },
+    hide() {
+      $('#hud').classList.add('hidden');
+      $('#roomPanel').classList.add('hidden');
+      this.hideResult();
+    },
+    set(id, v) {
+      if (this.last[id] === v) return;
+      this.last[id] = v;
+      document.getElementById(id).textContent = v;
+    },
+    update(s) {
+      this.set('hudKick', s.kicks === Infinity ? `#${s.index + 1}` : `${s.index + 1}/${s.kicks}`);
+      this.set('hudScore', fmt(s.total));
+      const w = s.wind;
+      this.set('hudWind', w === 0 ? 'calm' : `${w > 0 ? '→' : '←'} ${Math.abs(w).toFixed(1)}`);
+      const inFlight = s.phase === 'flight';
+      const distEl = $('#distance');
+      if (this.last.flight !== inFlight) {
+        this.last.flight = inFlight;
+        distEl.classList.toggle('hidden', !inFlight);
+      }
+      if (inFlight) this.set('distance', fmtM(Math.max(0, s.ballX)));
+      const ff = inFlight && !s.fast && s.mode === 'play';
+      if (this.last.ff !== ff) { this.last.ff = ff; $('#ffHint').classList.toggle('hidden', !ff); }
+      this.track(Math.max(0, s.ballX));
+    },
+    track(x) {
+      const range = Math.min(11000, Math.max(4500, Math.ceil((x + 400) / 1000) * 1000));
+      if (range !== this.range) {
+        this.range = range;
+        $('#trackMarks').innerHTML = P.TARGETS.filter((t) => t.x <= range).map((t) => (t.office
+          ? `<span class="mk office" style="left:${(t.x / range) * 100}%" title="${esc(t.name)}">🏢</span>`
+          : `<span class="mk" style="left:${(t.x / range) * 100}%;background:${t.color}" title="${esc(t.name)}"></span>`)).join('');
+      }
+      const pct = `${Math.min(100, (x / range) * 100).toFixed(2)}%`;
+      if (this.last.pct !== pct) {
+        this.last.pct = pct;
+        $('#trackBall').style.left = pct;
+        $('#trackFill').style.width = pct;
+      }
+    },
+    showResult(r) {
+      const bad = r.label === 'WHIFF!' || r.label === 'SHANKED';
+      $('#resLabel').textContent = r.label;
+      $('#resLabel').classList.toggle('bad', bad);
+      $('#resDist').textContent = fmtM(r.distance);
+      const t = r.target;
+      $('#resTarget').classList.toggle('hidden', !t);
+      if (t) $('#resTarget').textContent = `🎯 ${t.ring} · ${t.name} +${t.points}`;
+      if (r.points == null) $('#resPoints').innerHTML = '';
+      else $('#resPoints').innerHTML = `+${fmt(r.points)} pts${r.final ? ' <small>final ball ×2</small>' : ''}`;
+      const sub = [];
+      if (r.replay) sub.push(esc(r.replay));
+      else if (r.firstBounce) sub.push(`First bounce ${fmtM(r.firstBounce)}`);
+      if (r.extra) sub.push(esc(r.extra));
+      if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
+      $('#resSub').innerHTML = sub.join(' · ');
+      $('#result').classList.remove('hidden');
+      $('#distance').classList.add('hidden');
+      this.last.flight = false;
+    },
+    hideResult() { $('#result').classList.add('hidden'); },
+    hint(text) {
+      const el = $('#hint');
+      el.classList.toggle('hidden', !text);
+      if (text) el.textContent = text;
+    },
+    flash() {
+      const f = $('#fade');
+      f.classList.add('on');
+      requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+    },
+    toastSmall(t) { toast(t, 'small'); },
+  };
+
+  const game = new EK.Game($('#game'), hud);
+  EK.game = game;
+
+  // -------------------------------------------------------------------------
+  // Toasts & feed
+  // -------------------------------------------------------------------------
+  function toast(text, kind) {
+    const el = document.createElement('div');
+    el.className = `toast ${kind || ''}`;
+    el.textContent = text;
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), kind === 'small' ? 1600 : 3200);
+  }
+  function addFeed(html) {
+    const feed = $('#feed');
+    const el = document.createElement('div');
+    el.className = 'feed-item';
+    el.innerHTML = html;
+    feed.appendChild(el);
+    while (feed.children.length > 4) feed.firstChild.remove();
+    setTimeout(() => el.remove(), 8200);
+  }
+
+  // -------------------------------------------------------------------------
+  // Networking
+  // -------------------------------------------------------------------------
+  async function api(path, body, method) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (S.token) headers.Authorization = `Bearer ${S.token}`;
+    const res = await fetch(path, {
+      method: method || (body ? 'POST' : 'GET'),
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) {
+      const err = new Error((data && data.error) || `Request failed (${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
+  async function checkOnline() {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      S.online = res.ok;
+    } catch (e) {
+      S.online = false;
+    }
+    if (S.online && S.token) await loadMe();
+    if (S.online && !S.ws) connectWs();
+    renderMenu();
+    return S.online;
+  }
+
+  async function loadMe() {
+    try {
+      const me = await api('/api/me');
+      S.player = me.player;
+      S.ranks = me.ranks;
+    } catch (e) {
+      if (e.status === 401) {
+        S.token = null;
+        S.player = null;
+        local.del('ek_token');
+      }
+    }
+  }
+
+  function connectWs() {
+    if (!S.online) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    let ws;
+    try { ws = new WebSocket(`${proto}://${location.host}/ws`); } catch (e) { return; }
+    S.ws = ws;
+    ws.onopen = () => {
+      S.wsOk = true;
+      S.wsBackoff = 1000;
+      wsSend({ t: 'hello', token: S.token });
+    };
+    ws.onmessage = (e) => {
+      let msg;
+      try { msg = JSON.parse(e.data); } catch (err) { return; }
+      onWs(msg);
+    };
+    ws.onclose = () => {
+      S.wsOk = false;
+      S.ws = null;
+      renderStatus();
+      setTimeout(connectWs, S.wsBackoff);
+      S.wsBackoff = Math.min(S.wsBackoff * 2, 20000);
+    };
+  }
+  function wsSend(msg) {
+    if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(msg));
+  }
+
+  function onWs(msg) {
+    switch (msg.t) {
+      case 'hello':
+        S.onlineCount = msg.online;
+        renderStatus();
+        if (msg.ok) {
+          const code = S.wantRoom || (S.room && S.room.code);
+          if (code) { S.wantRoom = null; wsSend({ t: 'room:join', code }); }
+        }
+        break;
+      case 'online':
+        S.onlineCount = msg.count;
+        renderStatus();
+        break;
+      case 'feed': {
+        const t = msg.target;
+        const where = t ? ` — ${t.ring === 'BULLSEYE' ? '🎯 BULLSEYE' : t.ring.toLowerCase()} at ${esc(t.name)}` : '';
+        addFeed(`🔥 <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${where}`);
+        break;
+      }
+      case 'room:state':
+        S.room = msg;
+        if (msg.status === 'lobby') S.roomFinal = null;
+        renderRoom();
+        renderRoomPanel();
+        break;
+      case 'room:started':
+        S.roomFinal = null;
+        beginOnlineRound({ kind: 'room', roundId: msg.roundId, baseSeed: msg.baseSeed, upgrades: msg.upgrades });
+        break;
+      case 'room:kick':
+        if (S.player && msg.id !== S.player.id) {
+          addFeed(`👟 <b>${esc(msg.name)}</b>: ${fmtM(msg.distance)} <span style="opacity:.7">(+${fmt(msg.points)})</span>`);
+        }
+        break;
+      case 'room:final':
+        S.roomFinal = msg.standings;
+        if (!game.playing) renderRoom();
+        break;
+      case 'room:chat':
+        S.roomChat.push(msg);
+        if (S.roomChat.length > 40) S.roomChat.shift();
+        renderChat();
+        if (game.playing) addFeed(`💬 <b>${esc(msg.name)}</b>: ${esc(msg.text)}`);
+        break;
+      case 'room:left':
+        S.room = null;
+        S.roomChat = [];
+        renderRoom();
+        renderRoomPanel();
+        break;
+      case 'error':
+        toast(msg.error, 'error');
+        break;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Screens
+  // -------------------------------------------------------------------------
+  function show(name) {
+    S.screen = name;
+    $$('.screen').forEach((el) => el.classList.toggle('hidden', el.id !== `screen-${name}`));
+    game.inputBlocked = !!name && (game.mode === 'play' || game.mode === 'replay');
+    if (name) hud.hint(null);
+  }
+  function hideScreens() {
+    S.screen = null;
+    $$('.screen').forEach((el) => el.classList.add('hidden'));
+    game.inputBlocked = false;
+  }
+
+  function activeProfile() {
+    return S.player || S.offline;
+  }
+
+  function goMenu() {
+    game.attract(activeProfile().equipped);
+    hud.hide();
+    S.current = null;
+    renderMenu();
+    show('menu');
+  }
+
+  function renderStatus() {
+    const el = $('#onlineStatus');
+    if (!el) return;
+    if (!S.online) {
+      el.innerHTML = '<span class="dot off"></span>Offline — online modes unavailable. Casual & Free Kick still work.';
+    } else {
+      el.innerHTML = `<span class="dot${S.wsOk ? '' : ' off'}"></span>${S.wsOk ? `${S.onlineCount} kicker${S.onlineCount === 1 ? '' : 's'} online` : 'Connecting…'}`;
+    }
+  }
+
+  function renderMenu() {
+    const chip = $('#menuProfile');
+    if (S.player) {
+      const p = S.player;
+      chip.innerHTML = `👤 ${esc(p.name)} · Lv ${p.level} · <span class="coins">🪙 ${fmt(p.coins)}</span>`;
+    } else if (S.online) {
+      const o = S.offline;
+      chip.innerHTML = `👤 Create your kicker name · <span class="muted">offline Lv ${C.levelFromXp(o.xp)}</span>`;
+    } else {
+      const o = S.offline;
+      chip.innerHTML = `📴 Offline profile · Lv ${C.levelFromXp(o.xp)} · <span class="coins">🪙 ${fmt(o.coins)}</span>`;
+    }
+    $$('[data-action="ranked"], [data-action="rooms"]').forEach((b) => { b.disabled = !S.online; });
+    renderStatus();
+  }
+
+  function requirePlayer(fn) {
+    if (!S.online) { toast('You need to be online for that', 'error'); return; }
+    if (S.player) { fn(); return; }
+    S.pendingAfterName = fn;
+    $('#nameError').textContent = '';
+    show('name');
+    setTimeout(() => $('#nameInput').focus(), 50);
+  }
+
+  // -------------------------------------------------------------------------
+  // Rounds
+  // -------------------------------------------------------------------------
+  async function postKick(roundId, index, frame) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await api('/api/round/kick', { roundId, index, frame });
+      } catch (e) {
+        if (e.status || attempt >= 3) throw e;
+        toast('Connection wobble — retrying…', 'small');
+        await sleep(900 * (attempt + 1));
+      }
+    }
+  }
+
+  async function startRanked(challenge) {
+    try {
+      const r = await api('/api/round/start', challenge ? { challengeOf: challenge.id } : {});
+      beginOnlineRound({
+        kind: challenge ? 'challenge' : 'ranked', roundId: r.roundId, baseSeed: r.baseSeed, upgrades: r.upgrades,
+        beat: challenge ? challenge.score : null, challenge,
+      });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function beginOnlineRound(opts) {
+    let chain = Promise.resolve();
+    const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], challenge: opts.challenge || null };
+    S.current = cur;
+    hideScreens();
+    hud.show('play', { beat: opts.beat });
+    game.startRound({
+      baseSeed: opts.baseSeed,
+      upgrades: opts.upgrades,
+      equipped: S.player.equipped,
+      kicks: P.KICKS_PER_ROUND,
+      submit: (index, frame) => {
+        const p = chain.then(() => postKick(opts.roundId, index, frame));
+        chain = p.catch(() => {});
+        return p.then((res) => {
+          S.player = res.player;
+          cur.kicks.push({ d: res.result.distance, p: res.points, t: res.result.target });
+          return res;
+        });
+      },
+      onEnd: (res) => {
+        if (S.current !== cur) return;
+        if (opts.kind === 'room') {
+          hud.hide();
+          game.attract(S.player.equipped);
+          toast(`Your round: ${fmt(res.total)} pts`, 'good');
+          if (res.summary) celebrate(res.summary);
+          openRooms();
+          return;
+        }
+        const summary = Object.assign({ kind: opts.kind, roundId: opts.roundId, kicks: cur.kicks }, res.summary || { score: res.total });
+        summary.challenge = cur.challenge ? Object.assign({}, cur.challenge, summary.challenge) : null;
+        showEnd(summary);
+      },
+      onAbort: (msg) => {
+        toast(msg, 'error');
+        goMenu();
+      },
+    });
+    renderRoomPanel();
+  }
+
+  function startOffline(kicks) {
+    const prof = S.offline;
+    const endless = kicks === Infinity;
+    const cur = { kind: endless ? 'freekick' : 'casual', kicks: [] };
+    S.current = cur;
+    let total = 0;
+    hideScreens();
+    hud.show('play');
+    game.startRound({
+      baseSeed: (Math.random() * 2 ** 32) >>> 0,
+      upgrades: prof.upgrades,
+      equipped: prof.equipped,
+      kicks,
+      submit: (index, frame, sim, pts) => {
+        total += pts;
+        cur.kicks.push({ d: sim.distance, p: pts, t: sim.target });
+        const newBestKick = sim.distance > prof.bestKick;
+        if (newBestKick) prof.bestKick = sim.distance;
+        let extra = null;
+        if (endless) {
+          const lvBefore = C.levelFromXp(prof.xp);
+          const coins = C.coinsForFreeKick(pts);
+          prof.coins += coins;
+          prof.xp += Math.floor(pts / 2);
+          extra = `+${coins} 🪙`;
+          if (C.levelFromXp(prof.xp) > lvBefore) {
+            setTimeout(() => { sfx.levelUp(); toast(`Level up! You're now level ${C.levelFromXp(prof.xp)}`, 'good'); }, 400);
+          }
+        }
+        saveOffline();
+        return { points: pts, total, newBestKick, extra, done: false };
+      },
+      onEnd: () => {
+        const levelBefore = C.levelFromXp(prof.xp);
+        const coins = C.coinsForRound(total);
+        prof.coins += coins;
+        prof.xp += total;
+        prof.roundsPlayed += 1;
+        const newBestRound = total > prof.bestRound;
+        if (newBestRound) prof.bestRound = total;
+        saveOffline();
+        showEnd({ kind: 'casual', kicks: cur.kicks, score: total, coins, xp: total, newBestRound, levelBefore, levelAfter: C.levelFromXp(prof.xp) });
+      },
+      onAbort: (msg) => { toast(msg, 'error'); goMenu(); },
+    });
+  }
+
+  function celebrate(summary) {
+    if (summary.levelAfter > summary.levelBefore) {
+      sfx.levelUp();
+      toast(`Level up! You're now level ${summary.levelAfter}`, 'good');
+    } else {
+      sfx.coin();
+    }
+  }
+
+  function showEnd(s) {
+    hud.hide();
+    game.attract(activeProfileFor(s.kind).equipped);
+    celebrate(s);
+    const online = s.kind === 'ranked' || s.kind === 'challenge';
+    const kicks = (s.kicks || []).map((k, i) => `<div class="${k.t ? 'tgt' : ''}" title="${k.t ? esc(k.t.name || k.t) : ''}">#${i + 1}<b>${fmt(k.d)}m</b>+${fmt(k.p)}</div>`).join('');
+    const best = (s.kicks || []).reduce((m, k) => Math.max(m, k.d), 0);
+    let banners = '';
+    if (s.challenge) {
+      banners += s.challenge.won
+        ? `<div class="banner green">🏆 You beat ${esc(s.challenge.name)}'s ${fmt(s.challenge.score)}!</div>`
+        : `<div class="banner blue">So close! ${esc(s.challenge.name)} scored ${fmt(s.challenge.score)}.</div>`;
+    }
+    if (s.newBestRound) banners += '<div class="banner">★ New personal best round!</div>';
+    if (s.levelAfter > s.levelBefore) banners += `<div class="banner green">⬆️ Level ${s.levelAfter}! New gear may be unlocked in the shop.</div>`;
+    const rank = online && s.ranks && s.ranks.round ? `<div class="reward rank"><b>#${s.ranks.round}</b>All-time rank</div>` : '';
+    $('#endBody').innerHTML = `
+      <div class="end-title">${s.kind === 'casual' ? 'Casual round complete' : s.kind === 'challenge' ? 'Challenge complete' : 'Round complete'}</div>
+      <div class="end-score">${fmt(s.score)}</div>
+      <div class="end-sub">points · longest kick ${fmtM(best)}</div>
+      ${banners}
+      <div class="kick-list">${kicks}</div>
+      <div class="rewards">
+        <div class="reward"><b>+${fmt(s.coins)}</b>coins</div>
+        <div class="reward xp"><b>+${fmt(s.xp)}</b>XP</div>
+        ${rank}
+      </div>
+      <div class="actions">
+        <button class="btn primary" data-end="again">⚽ Play again</button>
+        ${online && s.roundId ? '<button class="btn green" data-end="challenge">⚔️ Challenge a friend</button>' : ''}
+        <button class="btn" data-end="shop">🛒 Shop</button>
+        ${online ? '<button class="btn" data-end="leaderboard">🏆 Leaderboard</button>' : ''}
+        <button class="btn" data-end="menu">Menu</button>
+      </div>`;
+    $('#endBody').onclick = (e) => {
+      const b = e.target.closest('[data-end]');
+      if (!b) return;
+      sfx.click();
+      const a = b.dataset.end;
+      if (a === 'again') {
+        if (s.kind === 'casual') startOffline(P.KICKS_PER_ROUND);
+        else if (s.kind === 'challenge' && s.challenge) startRanked(s.challenge.id ? s.challenge : null);
+        else startRanked();
+      } else if (a === 'challenge') shareChallenge(s.roundId, s.score);
+      else if (a === 'shop') openShop(online ? 'online' : 'offline');
+      else if (a === 'leaderboard') openLeaderboard();
+      else goMenu();
+    };
+    show('end');
+  }
+
+  function activeProfileFor(kind) {
+    return kind === 'casual' || kind === 'freekick' ? S.offline : S.player || S.offline;
+  }
+
+  async function shareChallenge(roundId, score) {
+    const url = `${location.origin}/?c=${encodeURIComponent(roundId)}`;
+    const text = `I scored ${fmt(score)} in Eggers Kick Off. Same 10 kicks — can you beat me?`;
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Eggers Kick Off challenge', text, url }); return; } catch (e) { /* fall back to copy */ }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text} ${url}`);
+      toast('Challenge link copied! Send it to a friend.', 'good');
+    } catch (e) {
+      modal(`<h2>Challenge link</h2><p class="muted">Copy this and send it to a friend:</p><code class="token">${esc(url)}</code>
+        <div class="actions"><button class="btn primary" data-modal="close">Done</button></div>`);
+    }
+  }
+
+  function quitPrompt() {
+    if (game.mode === 'replay') { game.stop(); goMenu(); return; }
+    const kind = S.current && S.current.kind;
+    const warn = kind === 'ranked' || kind === 'challenge' ? 'An unfinished ranked round won’t count towards the leaderboard (kicks so far still count for your longest kick).'
+      : kind === 'room' ? 'You’ll stay on the room board with the kicks you’ve taken so far.'
+        : kind === 'freekick' ? 'Coins from your free kicks are already saved.'
+          : 'This casual round won’t be saved.';
+    modal(`<h2>Leave this round?</h2><p class="muted">${warn}</p>
+      <div class="actions"><button class="btn danger" data-modal="leave">Leave</button><button class="btn primary" data-modal="close">Keep kicking</button></div>`,
+    (a) => {
+      if (a === 'leave') {
+        if (kind === 'freekick' && S.current.kicks.length) {
+          const best = S.current.kicks.reduce((m, k) => Math.max(m, k.d), 0);
+          toast(`Free kick session: ${S.current.kicks.length} kicks, best ${fmtM(best)}`, 'good');
+        }
+        game.stop();
+        goMenu();
+      } else {
+        hideScreens();
+      }
+    });
+  }
+
+  function modal(html, onAction) {
+    $('#modalBody').innerHTML = html;
+    $('#modalBody').onclick = (e) => {
+      const b = e.target.closest('[data-modal]');
+      if (!b) return;
+      sfx.click();
+      const a = b.dataset.modal;
+      if (onAction) onAction(a);
+      else if (a === 'close') goBackFromModal();
+    };
+    S.modalReturn = S.screen;
+    show('modal');
+  }
+  function goBackFromModal() {
+    if (game.mode === 'play' || game.mode === 'replay') hideScreens();
+    else if (S.modalReturn && S.modalReturn !== 'modal') show(S.modalReturn);
+    else goMenu();
+  }
+
+  // -------------------------------------------------------------------------
+  // Shop
+  // -------------------------------------------------------------------------
+  function openShop(which) {
+    S.shopProfile = which || (S.player ? 'online' : 'offline');
+    if (S.shopProfile === 'online' && !S.player) S.shopProfile = 'offline';
+    renderShop();
+    show('shop');
+  }
+
+  function shopProfileObj() {
+    return S.shopProfile === 'online' ? S.player : S.offline;
+  }
+
+  function renderShop() {
+    const prof = shopProfileObj();
+    $('#shopProfileTabs').innerHTML = S.player
+      ? `<button data-prof="online" class="${S.shopProfile === 'online' ? 'active' : ''}">🌐 ${esc(S.player.name)}</button>
+         <button data-prof="offline" class="${S.shopProfile === 'offline' ? 'active' : ''}">📴 Offline profile</button>`
+      : `<span class="muted">📴 Offline profile${S.online ? ' — create a kicker name to save online progress' : ''}</span>`;
+    const level = C.levelFromXp(prof.xp);
+    const lo = C.xpForLevel(level), hi = C.xpForLevel(level + 1);
+    const pct = Math.min(100, ((prof.xp - lo) / (hi - lo)) * 100);
+    $('#shopHead').innerHTML = `
+      <div class="coins-big">🪙 ${fmt(prof.coins)}</div>
+      <div class="level-box"><b>Level ${level}</b> <span class="muted">· ${fmt(prof.xp - lo)} / ${fmt(hi - lo)} XP to level ${level + 1}</span>
+        <div class="xpbar"><div style="width:${pct}%"></div></div></div>`;
+    $$('#shopTabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === S.shopTab));
+    const grid = $('#shopGrid');
+    if (S.shopTab === 'upgrades') {
+      grid.innerHTML = C.UPGRADES.map((u) => {
+        const lv = (prof.upgrades && prof.upgrades[u.id]) | 0;
+        const pips = Array.from({ length: 5 }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
+        let btn;
+        if (lv >= 5) btn = '<button disabled>MAXED</button>';
+        else if (level < C.UPGRADE_LEVEL_REQ[lv]) btn = `<button disabled>🔒 Level ${C.UPGRADE_LEVEL_REQ[lv]}</button>`;
+        else btn = `<button data-buy="upgrade:${u.id}" ${prof.coins < C.UPGRADE_COSTS[lv] ? 'disabled' : ''}>Upgrade · 🪙 ${fmt(C.UPGRADE_COSTS[lv])}</button>`;
+        return `<div class="item"><div class="top"><span class="icon">${u.icon}</span><div><div class="name">${esc(u.name)}</div><div class="desc">${esc(u.desc)}</div></div></div>
+          <div class="pips">${pips}</div>${btn}</div>`;
+      }).join('');
+    } else {
+      const list = C.SLOTS[S.shopTab];
+      const eq = Object.assign({}, C.DEFAULT_EQUIPPED, prof.equipped);
+      grid.innerHTML = list.map((it) => {
+        const key = `${S.shopTab}:${it.id}`;
+        const owned = C.isOwned(prof, S.shopTab, it.id);
+        const isEq = eq[S.shopTab] === it.id;
+        let btn;
+        if (isEq) btn = '<button class="owned" disabled>✓ Equipped</button>';
+        else if (owned) btn = `<button class="owned" data-equip="${S.shopTab}:${it.id}">Equip</button>`;
+        else if (level < it.level) btn = `<button disabled>🔒 Level ${it.level}</button>`;
+        else btn = `<button data-buy="${key}" ${prof.coins < it.cost ? 'disabled' : ''}>Buy · 🪙 ${fmt(it.cost)}</button>`;
+        return `<div class="item ${isEq ? 'equipped' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}</div></div>${btn}</div>`;
+      }).join('');
+    }
+  }
+
+  function itemIcon(slot, it) {
+    if (slot === 'outfit') return `<span class="icon" style="background:${it.shirt}">${it.pattern === 'gi' ? '🥋' : it.id === 'astro' ? '🧑‍🚀' : it.id === 'suit' ? '👔' : '👕'}</span>`;
+    if (slot === 'ball') return `<span class="icon" style="background:${it.base}">${it.style === 'egg' ? '🥚' : it.style === 'fire' ? '🔥' : it.style === 'beach' ? '🏖️' : '⚽'}</span>`;
+    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥' };
+    return `<span class="icon">${icons[it.id] || '✨'}</span>`;
+  }
+
+  async function shopAction(kind, key) {
+    try {
+      if (S.shopProfile === 'online') {
+        const res = kind === 'buy'
+          ? await api('/api/shop/buy', { item: key })
+          : await api('/api/shop/equip', { slot: key.split(':')[0], id: key.split(':')[1] });
+        S.player = res.player;
+      } else {
+        const err = kind === 'buy' ? C.applyPurchase(S.offline, key) : C.applyEquip(S.offline, key.split(':')[0], key.split(':')[1]);
+        if (err) throw new Error(err);
+        saveOffline();
+      }
+      if (kind === 'buy') { sfx.coin(); toast('Purchased!', 'good'); } else sfx.click();
+      game.attract(shopProfileObj().equipped);
+      renderShop();
+      renderMenu();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Leaderboard
+  // -------------------------------------------------------------------------
+  async function openLeaderboard() {
+    show('leaderboard');
+    renderLeaderboard();
+  }
+
+  async function renderLeaderboard() {
+    $$('#lbTabs button').forEach((b) => b.classList.toggle('active', b.dataset.type === S.lbType));
+    const table = $('#lbTable');
+    const mine = $('#lbMine');
+    if (!S.online) {
+      table.innerHTML = '';
+      mine.innerHTML = `The online leaderboard needs a connection. Your offline bests: <b>${fmt(S.offline.bestRound)}</b> pts round · <b>${fmtM(S.offline.bestKick)}</b> kick.`;
+      return;
+    }
+    table.innerHTML = '<tr><td class="muted">Loading…</td></tr>';
+    try {
+      const type = S.lbType;
+      const [lb] = await Promise.all([api(`/api/leaderboard?type=${type}`), S.player ? loadMe() : null]);
+      if (type !== S.lbType) return;
+      if (S.player) {
+        const r = S.ranks || {};
+        mine.innerHTML = `You: best round <b>${fmt(S.player.bestRound)}</b>${r.round ? ` (#${r.round})` : ''} · longest kick <b>${fmtM(S.player.bestKick)}</b>${r.kick ? ` (#${r.kick})` : ''}`;
+      } else mine.textContent = 'Play a ranked round to get on the board!';
+      if (!lb.rows.length) {
+        table.innerHTML = '<tr><td class="muted">No kicks yet — be the first!</td></tr>';
+        return;
+      }
+      const unit = type === 'kick' ? 'Distance' : 'Points';
+      table.innerHTML = `<tr><th>#</th><th>Kicker</th><th style="text-align:right">${unit}</th><th></th></tr>` + lb.rows.map((r, i) => {
+        const me = S.player && r.playerId === S.player.id;
+        const val = type === 'kick' ? fmtM(r.value) : fmt(r.value);
+        let act = '';
+        if (r.roundId && type === 'kick' && r.kickIndex != null) act = `<button data-replay="${esc(r.roundId)}" data-idx="${r.kickIndex}" title="Watch replay">▶ Watch</button>`;
+        else if (r.roundId && type !== 'kick' && !me) act = `<button data-challenge="${esc(r.roundId)}" title="Play the same 10 kicks">⚔️ Beat it</button>`;
+        const medal = ['🥇', '🥈', '🥉'][i] || i + 1;
+        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}</td></tr>`;
+      }).join('');
+    } catch (e) {
+      table.innerHTML = `<tr><td class="error">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function watchReplay(roundId, idx) {
+    try {
+      const r = await api(`/api/round/${encodeURIComponent(roundId)}`);
+      const k = r.kicks[idx];
+      if (!k) throw new Error('Replay not available');
+      hideScreens();
+      hud.show('replay', { replay: `${r.name} · ${fmtM(k.d)}` });
+      game.startReplay({
+        seed: P.kickSeed(r.baseSeed, idx), frame: k.f, upgrades: r.upgrades, equipped: r.equipped,
+        title: `${r.name}'s ${fmtM(k.d)} kick`,
+        onEnd: () => { hud.hide(); game.attract(activeProfile().equipped); openLeaderboard(); },
+      });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  async function offerChallenge(roundId) {
+    try {
+      const r = await api(`/api/round/${encodeURIComponent(roundId)}`);
+      if (!r.finished) throw new Error('That round is still in progress');
+      modal(`<h2>⚔️ Challenge</h2>
+        <p><b>${esc(r.name)}</b> scored <b>${fmt(r.score)}</b> points.</p>
+        <p class="muted">You'll get the exact same 10 juggles, wind and field. Your own upgrades apply. Can you beat them?</p>
+        <div class="actions"><button class="btn primary" data-modal="go">Accept challenge</button><button class="btn" data-modal="close">Not now</button></div>`,
+      (a) => {
+        if (a === 'go') requirePlayer(() => startRanked({ id: r.id, score: r.score, name: r.name }));
+        else goBackFromModal();
+      });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Rooms
+  // -------------------------------------------------------------------------
+  function openRooms() {
+    renderRoom();
+    show('rooms');
+  }
+
+  function renderRoom() {
+    const body = $('#roomBody');
+    if (!body) return;
+    const room = S.room;
+    if (!S.online) {
+      body.innerHTML = '<p class="muted">Multiplayer needs a connection.</p>';
+      return;
+    }
+    if (!room) {
+      body.innerHTML = `
+        <p class="muted">Everyone in the room gets the <b>same 10 juggles, wind and field</b>. Scores update live. The top kicker wins.</p>
+        <div class="actions"><button class="btn primary" data-room="create">➕ Create a room</button></div>
+        <h3>Join a friend's room</h3>
+        <form id="joinForm" class="inline"><input id="joinCode" maxlength="4" placeholder="CODE" autocomplete="off" style="text-transform:uppercase;letter-spacing:.2em" /><button type="submit">Join</button></form>`;
+      $('#joinForm').onsubmit = (e) => {
+        e.preventDefault();
+        const code = $('#joinCode').value.trim().toUpperCase();
+        if (code.length === 4) wsSend({ t: 'room:join', code });
+      };
+      return;
+    }
+    const me = S.player && S.player.id;
+    const isHost = room.hostId === me;
+    const members = room.members.slice().sort((a, b) => (room.status === 'lobby' ? 0 : b.total - a.total));
+    const list = members.map((m, i) => {
+      const tag = `${m.id === room.hostId ? ' 👑' : ''}${m.id === me ? ' (you)' : ''}`;
+      const right = room.status === 'lobby' ? (m.connected ? 'ready' : 'away')
+        : `${fmt(m.total)} pts · ${m.done ? 'done' : `kick ${Math.min(m.kicks + 1, 10)}/10`}`;
+      const medal = room.status !== 'lobby' ? `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ` : '';
+      return `<li class="${m.connected ? '' : 'off'}"><span>${medal}${esc(m.name)}${tag}</span><span class="muted">${right}</span></li>`;
+    }).join('');
+    let status = '';
+    let actions = '';
+    if (room.status === 'lobby') {
+      status = isHost ? `<p class="muted">Share the code, then start when everyone's in.</p>` : '<p class="muted">Waiting for the host to start…</p>';
+      actions = `${isHost ? `<button class="btn primary" data-room="start">▶ Start match (${room.members.filter((m) => m.connected).length} player${room.members.length === 1 ? '' : 's'})</button>` : ''}
+        <button class="btn" data-room="share">🔗 Copy invite link</button>`;
+    } else if (room.status === 'playing') {
+      const mine = room.members.find((m) => m.id === me);
+      status = mine && mine.done ? '<div class="banner blue">Nice kicking! Waiting for everyone else to finish…</div>' : '<p class="muted">Match in progress.</p>';
+    } else {
+      const winner = S.roomFinal && S.roomFinal[0];
+      status = winner ? `<div class="banner">🏆 ${esc(winner.name)} is the top kicker with ${fmt(winner.total)} pts!</div>` : '';
+      actions = isHost ? '<button class="btn primary" data-room="reset">🔁 Rematch</button>' : '<p class="muted">Waiting for the host to start a rematch…</p>';
+    }
+    body.innerHTML = `
+      <div class="room-code">${esc(room.code)}</div>
+      ${status}
+      <ul class="room-members">${list}</ul>
+      <label class="toggle"><input type="checkbox" id="fairToggle" ${room.fair ? 'checked' : ''} ${isHost && room.status !== 'playing' ? '' : 'disabled'} />
+        Level playing field (everyone kicks with no upgrades)</label>
+      <div class="actions">${actions}<button class="btn" data-room="leave">Leave room</button></div>
+      <h3>Chat</h3>
+      <div class="chat" id="roomChat"></div>
+      <form id="chatForm" class="inline"><input id="chatInput" maxlength="120" placeholder="Talk some trash…" autocomplete="off" /><button type="submit">Send</button></form>`;
+    $('#fairToggle').onchange = (e) => wsSend({ t: 'room:fair', fair: e.target.checked });
+    $('#chatForm').onsubmit = (e) => {
+      e.preventDefault();
+      const v = $('#chatInput').value.trim();
+      if (v) wsSend({ t: 'room:chat', text: v });
+      $('#chatInput').value = '';
+    };
+    renderChat();
+  }
+
+  function renderChat() {
+    const el = $('#roomChat');
+    if (!el) return;
+    el.innerHTML = S.roomChat.map((m) => `<div><b>${esc(m.name)}:</b> ${esc(m.text)}</div>`).join('') || '<div class="muted">No messages yet.</div>';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function renderRoomPanel() {
+    const el = $('#roomPanel');
+    const room = S.room;
+    const show = room && room.status !== 'lobby' && S.current && S.current.kind === 'room' && game.playing;
+    el.classList.toggle('hidden', !show);
+    if (!show) return;
+    const me = S.player && S.player.id;
+    const rows = room.members.slice().sort((a, b) => b.total - a.total).map((m, i) => `
+      <div class="rp-row ${m.id === me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${esc(m.name)}</span>
+      <span>${fmt(m.total)} <span class="rp-kicks">${m.done ? '✓' : `${m.kicks}/10`}</span></span></div>`).join('');
+    el.innerHTML = `<h4>Room ${esc(room.code)}</h4>${rows}`;
+  }
+
+  async function copyRoomLink() {
+    const url = `${location.origin}/?room=${S.room.code}`;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Join my Eggers Kick Off room', url }); return; }
+      await navigator.clipboard.writeText(url);
+      toast('Invite link copied!', 'good');
+    } catch (e) {
+      toast(`Room code: ${S.room.code}`, 'good');
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Profile
+  // -------------------------------------------------------------------------
+  function renderProfile() {
+    const body = $('#profileBody');
+    const o = S.offline;
+    let html = '';
+    if (S.player) {
+      const p = S.player;
+      const r = S.ranks || {};
+      html += `<h3>🌐 ${esc(p.name)} <span class="lvl">Lv ${p.level}</span></h3>
+        <div class="stat-grid">
+          <div class="stat"><span>Coins</span><b>🪙 ${fmt(p.coins)}</b></div>
+          <div class="stat"><span>Best round</span><b>${fmt(p.bestRound)}</b></div>
+          <div class="stat"><span>Longest kick</span><b>${fmtM(p.bestKick)}</b></div>
+          <div class="stat"><span>Rounds</span><b>${fmt(p.roundsPlayed)}</b></div>
+          <div class="stat"><span>Round rank</span><b>${r.round ? `#${r.round}` : '—'}</b></div>
+          <div class="stat"><span>Kick rank</span><b>${r.kick ? `#${r.kick}` : '—'}</b></div>
+        </div>
+        <form id="renameForm" class="inline"><input id="renameInput" maxlength="16" value="${esc(p.name)}" /><button type="submit">Rename</button></form>
+        <details><summary>Transfer code (play on another device)</summary>
+          <p class="muted">Keep this secret — anyone with it can use your profile. Paste it into "Already played on another device?" on the other device.</p>
+          <code class="token">${esc(S.token)}</code>
+          <div class="actions"><button class="btn" data-prof="copy">Copy code</button><button class="btn danger" data-prof="signout">Sign out on this device</button></div>
+        </details>`;
+    } else if (S.online) {
+      html += '<p class="muted">Create a kicker name to save progress online and get on the leaderboard.</p><div class="actions"><button class="btn primary" data-prof="create">Create kicker name</button></div>';
+    }
+    html += `<h3>📴 Offline profile <span class="lvl">Lv ${C.levelFromXp(o.xp)}</span></h3>
+      <div class="stat-grid">
+        <div class="stat"><span>Coins</span><b>🪙 ${fmt(o.coins)}</b></div>
+        <div class="stat"><span>Best round</span><b>${fmt(o.bestRound)}</b></div>
+        <div class="stat"><span>Longest kick</span><b>${fmtM(o.bestKick)}</b></div>
+        <div class="stat"><span>Rounds</span><b>${fmt(o.roundsPlayed)}</b></div>
+      </div>
+      <div class="actions"><button class="btn" data-prof="reset">Reset offline progress</button>
+      <button class="btn" data-prof="mute">${sfx.muted ? '🔇 Sound off' : '🔊 Sound on'}</button></div>`;
+    body.innerHTML = html;
+    const rf = $('#renameForm');
+    if (rf) {
+      rf.onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await api('/api/me/name', { name: $('#renameInput').value });
+          S.player = res.player;
+          toast('Name updated', 'good');
+          renderProfile();
+          renderMenu();
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Event wiring
+  // -------------------------------------------------------------------------
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-action]');
+    if (a) {
+      sfx.unlock();
+      sfx.click();
+      switch (a.dataset.action) {
+        case 'ranked': requirePlayer(() => startRanked()); break;
+        case 'rooms': requirePlayer(openRooms); break;
+        case 'casual': startOffline(P.KICKS_PER_ROUND); break;
+        case 'freekick': startOffline(Infinity); break;
+        case 'shop': openShop(); break;
+        case 'leaderboard': openLeaderboard(); break;
+        case 'howto': show('howto'); break;
+        case 'profile': renderProfile(); show('profile'); break;
+        case 'back': goMenu(); break;
+      }
+      return;
+    }
+    const tab = e.target.closest('#shopTabs [data-tab]');
+    if (tab) { S.shopTab = tab.dataset.tab; renderShop(); return; }
+    const prof = e.target.closest('#shopProfileTabs [data-prof]');
+    if (prof) { S.shopProfile = prof.dataset.prof; game.attract(shopProfileObj().equipped); renderShop(); return; }
+    const buy = e.target.closest('[data-buy]');
+    if (buy) { shopAction('buy', buy.dataset.buy); return; }
+    const eq = e.target.closest('[data-equip]');
+    if (eq) { shopAction('equip', eq.dataset.equip); return; }
+    const lb = e.target.closest('#lbTabs [data-type]');
+    if (lb) { S.lbType = lb.dataset.type; renderLeaderboard(); return; }
+    const rp = e.target.closest('[data-replay]');
+    if (rp) { watchReplay(rp.dataset.replay, Number(rp.dataset.idx)); return; }
+    const ch = e.target.closest('[data-challenge]');
+    if (ch) { offerChallenge(ch.dataset.challenge); return; }
+    const room = e.target.closest('[data-room]');
+    if (room) {
+      sfx.click();
+      const act = room.dataset.room;
+      if (act === 'create') wsSend({ t: 'room:create' });
+      else if (act === 'start') wsSend({ t: 'room:start' });
+      else if (act === 'reset') wsSend({ t: 'room:reset' });
+      else if (act === 'leave') wsSend({ t: 'room:leave' });
+      else if (act === 'share') copyRoomLink();
+      if (!S.wsOk) toast('Reconnecting to the server…', 'error');
+      return;
+    }
+    const pa = e.target.closest('#profileBody [data-prof]');
+    if (pa) {
+      const act = pa.dataset.prof;
+      if (act === 'copy') navigator.clipboard.writeText(S.token).then(() => toast('Copied', 'good'), () => toast('Copy failed — select the code manually', 'error'));
+      else if (act === 'signout') {
+        modal('<h2>Sign out?</h2><p class="muted">Make sure you\'ve saved your transfer code, or you won\'t be able to get this profile back.</p><div class="actions"><button class="btn danger" data-modal="yes">Sign out</button><button class="btn" data-modal="no">Cancel</button></div>', (x) => {
+          if (x === 'yes') {
+            S.token = null; S.player = null; S.ranks = null; local.del('ek_token');
+            if (S.ws) S.ws.close();
+            goMenu();
+          } else { renderProfile(); show('profile'); }
+        });
+      } else if (act === 'create') requirePlayer(() => { renderProfile(); show('profile'); });
+      else if (act === 'reset') {
+        modal('<h2>Reset offline progress?</h2><p class="muted">Your offline coins, upgrades and gear will be wiped. Online progress is not affected.</p><div class="actions"><button class="btn danger" data-modal="yes">Reset</button><button class="btn" data-modal="no">Cancel</button></div>', (x) => {
+          if (x === 'yes') { S.offline = C.newProfile(); saveOffline(); toast('Offline progress reset'); }
+          renderProfile(); show('profile');
+        });
+      } else if (act === 'mute') { sfx.toggle(); renderProfile(); }
+    }
+  });
+
+  $('#hudMenu').addEventListener('click', (e) => { e.stopPropagation(); quitPrompt(); });
+  $('#hudMute').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#hudMute').textContent = sfx.toggle() ? '🔇' : '🔊';
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (game.mode === 'play' || game.mode === 'replay') { if (S.screen === 'modal') hideScreens(); else quitPrompt(); }
+    else if (S.screen && S.screen !== 'menu' && S.screen !== 'end') goMenu();
+  });
+
+  $('#nameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('#nameError').textContent = '';
+    try {
+      const res = await api('/api/player', { name: $('#nameInput').value });
+      S.token = res.token;
+      local.set('ek_token', S.token);
+      S.player = res.player;
+      wsSend({ t: 'hello', token: S.token });
+      toast(`Welcome, ${S.player.name}!`, 'good');
+      renderMenu();
+      const fn = S.pendingAfterName;
+      S.pendingAfterName = null;
+      if (fn) fn(); else goMenu();
+    } catch (err) {
+      $('#nameError').textContent = err.message;
+    }
+  });
+
+  $('#transferForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = $('#transferInput').value.trim();
+    if (!code) return;
+    const prev = S.token;
+    S.token = code;
+    try {
+      const me = await api('/api/me');
+      S.player = me.player;
+      S.ranks = me.ranks;
+      local.set('ek_token', code);
+      wsSend({ t: 'hello', token: code });
+      toast(`Welcome back, ${S.player.name}!`, 'good');
+      const fn = S.pendingAfterName;
+      S.pendingAfterName = null;
+      if (fn) fn(); else goMenu();
+    } catch (err) {
+      S.token = prev;
+      $('#nameError').textContent = err.status === 401 ? 'That transfer code was not recognised' : err.message;
+    }
+  });
+
+  window.addEventListener('online', checkOnline);
+
+  // -------------------------------------------------------------------------
+  // Boot
+  // -------------------------------------------------------------------------
+  async function boot() {
+    goMenu();
+    const params = new URLSearchParams(location.search);
+    const challengeId = params.get('c');
+    const roomCode = params.get('room');
+    if (challengeId || roomCode) history.replaceState(null, '', location.pathname);
+    await checkOnline();
+    game.attract(activeProfile().equipped);
+    if (challengeId && S.online) offerChallenge(challengeId);
+    else if (roomCode && S.online) {
+      requirePlayer(() => {
+        S.wantRoom = roomCode.toUpperCase();
+        if (S.wsOk) { wsSend({ t: 'room:join', code: S.wantRoom }); S.wantRoom = null; }
+        openRooms();
+      });
+    }
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }
+
+  boot();
+})();
