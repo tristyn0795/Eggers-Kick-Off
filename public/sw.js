@@ -1,5 +1,5 @@
 /* Offline support: cache the game shell so Casual / Free Kick work with no connection. */
-const CACHE = 'eko-v7';
+const CACHE = 'eko-v8';
 const ASSETS = [
   '/', '/index.html', '/style.css', '/icon.svg', '/manifest.webmanifest',
   '/js/audio.js', '/js/render.js', '/js/game.js', '/js/app.js',
@@ -23,7 +23,9 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api') || url.pathname === '/ws') return;
   e.respondWith(
-    fetch(e.request)
+    // Always revalidate with the server so updates show up immediately; the cache is only
+    // the offline fallback.
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

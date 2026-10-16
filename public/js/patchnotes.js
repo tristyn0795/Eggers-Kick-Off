@@ -1,6 +1,20 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.5.1',
+    date: '16 Oct 2026',
+    title: 'Phone layout fix 📱',
+    sections: [
+      {
+        heading: '🔧 Fixes',
+        items: [
+          'Fixed the score bar stacking into a column on some phones right after an update. Your phone could keep an old copy of the styles; every update now loads fresh files instantly.',
+          'The camera now always keeps the ball on screen during high kicks on phones.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.5.0',
     date: '16 Oct 2026',
     title: 'A better grind + phone, foldable & desktop polish 📱',

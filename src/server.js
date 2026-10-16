@@ -1,5 +1,6 @@
 'use strict';
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
@@ -139,16 +140,22 @@ async function main() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
 
-  const staticOpts = { maxAge: '1h', setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff') };
-  app.use('/shared', express.static(path.join(__dirname, '..', 'shared'), {
-    setHeaders: (res) => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'no-cache'); },
-  }));
-  app.use(express.static(path.join(__dirname, '..', 'public'), Object.assign({}, staticOpts, {
-    setHeaders: (res, file) => {
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      if (/\.(html|js|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
-    },
-  })));
+  // Every response for game files must be revalidated (cheap 304s when unchanged), and the
+  // page links its CSS/JS with a per-deploy version so a phone can never mix an old
+  // stylesheet with a new page (that once stacked the HUD into a column).
+  const ASSET_VERSION = `${require('../package.json').version}-${Date.now().toString(36)}`;
+  const noCache = (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-cache');
+  };
+  const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8')
+    .replace(/__ASSET_VERSION__/g, ASSET_VERSION);
+  app.get(['/', '/index.html'], (req, res) => {
+    noCache(res);
+    res.type('html').send(indexHtml);
+  });
+  app.use('/shared', express.static(path.join(__dirname, '..', 'shared'), { setHeaders: noCache }));
+  app.use(express.static(path.join(__dirname, '..', 'public'), { index: false, setHeaders: noCache }));
 
   const auth = async (req, res, next) => {
     try {

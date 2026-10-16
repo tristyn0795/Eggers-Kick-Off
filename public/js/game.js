@@ -465,6 +465,11 @@
       }
       const sk = 1 - Math.exp(-dt * (inAir ? 3.2 : 8));
       this.scale = Math.exp(lerp(Math.log(this.scale), Math.log(targetScale), sk));
+      if (inAir && ball.y > 0.5) {
+        // Never let a rising ball leave the top of the screen (or hide under the HUD).
+        const topRoom = r.groundY - (r.W < 600 ? 150 : 130);
+        if (ball.y * this.scale > topRoom) this.scale = Math.max(0.2, topRoom / ball.y);
+      }
       this.anchor = lerp(this.anchor, targetAnchor, 1 - Math.exp(-dt * 2));
       this.camX = ball.x;
 
