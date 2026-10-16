@@ -404,7 +404,7 @@
   }
 
   return {
-    DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
+    RULES_VERSION, DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
     KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,

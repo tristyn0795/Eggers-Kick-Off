@@ -366,3 +366,9 @@ test('app shells: CORS for Capacitor origins, Digital Asset Links endpoint', asy
     assert.strictEqual((await fetch(BASE + page)).status, 200, page);
   }
 });
+
+test('health reports the game rules version (app update guard)', async () => {
+  const h = await api('/api/health');
+  assert.strictEqual(h.body.rules, P.RULES_VERSION);
+  assert.ok(P.RULES_VERSION >= 1);
+});
