@@ -148,6 +148,21 @@ test('prestige is server-side: rejected until ready, then resets and boosts scor
   assert.strictEqual(start.body.upgrades.prestige, undefined, 'no prestige yet, no bonus');
 });
 
+test('challenges are tracked by the server from verified kicks', async () => {
+  const { token } = (await api('/api/player', { name: 'Challenger Chloe' })).body;
+  const me = (await api('/api/me', null, token)).body.player;
+  assert.strictEqual(me.challenges.daily.length, 3);
+  assert.strictEqual(me.challenges.weekly.length, 3);
+  const { roundId, baseSeed, upgrades } = (await api('/api/round/start', {}, token)).body;
+  let last;
+  for (let i = 0; i < 10; i++) {
+    last = await api('/api/round/kick', { roundId, index: i, frame: bestFrame(P.kickSeed(baseSeed, i), upgrades) }, token);
+  }
+  const after = last.body.player.challenges;
+  const moved = after.daily.concat(after.weekly).some((c) => c.progress > 0);
+  assert.ok(moved, 'a full round of good kicks advances at least one challenge');
+});
+
 test('career match is verified by the server', async () => {
   const K = require('../shared/career');
   const token = (await api('/api/player', { name: 'Career Kid' })).body.token;

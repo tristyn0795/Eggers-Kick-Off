@@ -4,6 +4,7 @@
   const P = window.EKPhysics;
   const C = window.EKCatalog;
   const EKCareer = window.EKCareer;
+  const CH = window.EKChallenges;
   const EK = window.EK;
   const sfx = EK.sfx;
 
@@ -153,8 +154,11 @@
       if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
       $('#resSub').innerHTML = sub.join(' · ');
       const ms = r.milestones || [];
-      $('#resMs').classList.toggle('hidden', !ms.length);
-      $('#resMs').innerHTML = ms.map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`).join('<br>');
+      const chs = r.challenges || [];
+      $('#resMs').classList.toggle('hidden', !ms.length && !chs.length);
+      $('#resMs').innerHTML = ms.map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`)
+        .concat(chs.map((c) => `✅ ${c.weekly ? 'Weekly' : 'Daily'} challenge: <b>${esc(c.text)}</b> +${fmt(c.reward)} 🪙`)).join('<br>');
+      if (chs.length) setTimeout(() => sfx.levelUp(), 250);
       if (r.henry) toast('🪿 Henry loves it! QUACK!', 'good');
       const vs = this.onResult ? this.onResult(r) : null;
       $('#resVs').classList.toggle('hidden', !vs);
@@ -429,6 +433,7 @@
       chip.innerHTML = `📴 Offline profile${o.career && o.career.pro ? ' <span class="pro-badge">PRO</span>' : ''} · Lv ${C.levelFromXp(o.xp)} · <span class="coins">🪙 ${fmt(o.coins)}</span>`;
     }
     $$('[data-action="ranked"], [data-action="rooms"]').forEach((b) => { b.disabled = !S.online; });
+    renderChallengeBadge();
     renderStatus();
   }
 
@@ -519,7 +524,7 @@
 
   function beginOnlineRound(opts) {
     let chain = Promise.resolve();
-    const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], milestones: [], challenge: opts.challenge || null };
+    const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], milestones: [], challenges: [], challenge: opts.challenge || null };
     if (opts.boss) attachBoss(cur, opts.boss, opts.baseSeed, opts.upgrades);
     S.current = cur;
     hideScreens();
@@ -536,6 +541,7 @@
           setPlayer(res.player);
           cur.kicks.push({ d: res.result.distance, p: res.points, t: res.result.target });
           cur.milestones.push(...(res.milestones || []));
+          cur.challenges.push(...(res.challenges || []));
           return res;
         });
       },
@@ -552,6 +558,7 @@
         const summary = Object.assign({ kind: opts.kind, roundId: opts.roundId, kicks: cur.kicks }, res.summary || { score: res.total });
         summary.challenge = cur.challenge ? Object.assign({}, cur.challenge, summary.challenge) : null;
         summary.kickMilestones = cur.milestones;
+        summary.challengesDone = cur.challenges;
         showEnd(summary);
       },
       onAbort: (msg) => {
@@ -566,7 +573,7 @@
     const prof = S.offline;
     const endless = kicks === Infinity;
     const baseSeed = (Math.random() * 2 ** 32) >>> 0;
-    const cur = { kind: boss ? 'career' : endless ? 'freekick' : 'casual', kicks: [], milestones: [], offline: true };
+    const cur = { kind: boss ? 'career' : endless ? 'freekick' : 'casual', kicks: [], milestones: [], challenges: [], offline: true };
     if (boss) attachBoss(cur, boss, baseSeed, Object.assign({}, prof.upgrades));
     S.current = cur;
     let total = 0;
@@ -586,8 +593,10 @@
         if (newBestKick) prof.bestKick = sim.distance;
         const milestones = C.checkMilestones(prof, { kick: sim });
         cur.milestones.push(...milestones);
+        const challenges = CH.progress(prof, { kick: sim });
+        cur.challenges.push(...challenges);
         saveOffline();
-        return { points: pts, total, newBestKick, milestones, earned, done: false };
+        return { points: pts, total, newBestKick, milestones, challenges, earned, done: false };
       },
       onEnd: () => {
         prof.coins += C.ROUND_COMPLETION_COINS;
@@ -608,11 +617,14 @@
           prof.coins += applied.outcome.reward;
           career = applied.outcome;
         }
+        const roundChallenges = endless ? [] : CH.progress(prof, { round: { score: total, careerWon: !!(career && career.won) } });
+        cur.challenges.push(...roundChallenges);
         const roundMilestones = C.checkMilestones(prof, { roundScore: total });
         saveOffline();
         showEnd({
           kind: cur.kind, offline: true, kicks: cur.kicks, score: total, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: total,
           newBestRound, levelBefore, levelAfter, levelBonus, career, daily, milestones: roundMilestones, kickMilestones: cur.milestones,
+          challengesDone: cur.challenges,
           coinBreakdown: {
             points: kickCoins, completion: C.ROUND_COMPLETION_COINS, daily: daily.bonus, levelBonus,
             career: career ? career.reward : 0, milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
@@ -647,6 +659,7 @@
       [`Level-up bonus`, b.levelBonus],
       ['Career first-win bounty', b.career],
       ['Milestones', b.milestones + kickMs],
+      ['Daily & weekly challenges', (s.challengesDone || []).reduce((n, c) => n + c.reward, 0)],
     ].filter(([, v]) => v > 0);
     const total = rows.reduce((n, [, v]) => n + v, 0);
     return `<details class="coin-breakdown" open><summary>🪙 +${fmt(total)} coins — how you earned them</summary>
@@ -680,6 +693,8 @@
     }
     if (s.newBestRound) banners += '<div class="banner">★ New personal best round!</div>';
     if (s.levelAfter > s.levelBefore) banners += `<div class="banner green">⬆️ Level ${s.levelAfter}!</div>`;
+    const chDone = s.challengesDone || [];
+    if (chDone.length) banners += `<div class="banner green">✅ ${chDone.map((c) => `${esc(c.text)} <small>+${fmt(c.reward)}</small>`).join(' · ')}</div>`;
     const ms = (s.kickMilestones || []).concat(s.milestones || []);
     if (ms.length) banners += `<div class="banner milestone">🏅 ${ms.map((m) => `${esc(m.name)} <small>+${fmt(m.reward)}</small>`).join(' · ')}</div>`;
     const rank = online && s.ranks && s.ranks.round ? `<div class="reward rank"><b>#${s.ranks.round}</b>All-time rank</div>` : '';
@@ -877,6 +892,60 @@
       r.drawBall(0, (999 - 36) / 260, 0.3, r.time);
       r.ctx.globalAlpha = 1;
     }
+  }
+
+  // ---- Daily & weekly challenges -------------------------------------------
+  function challengeProfile() {
+    return S.player || S.offline;
+  }
+
+  function untilText(ms) {
+    const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+    return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h ${m}m`;
+  }
+
+  async function openChallenges() {
+    if (S.player) await loadMe(); // the server rolls new challenges when a period starts
+    else { CH.roll(S.offline); saveOffline(); }
+    renderChallenges();
+    show('challenges');
+  }
+
+  function challengeCard(c) {
+    const pct = Math.min(100, (c.progress / c.goal) * 100);
+    const prog = c.single && c.progress && !c.done ? `best ${fmt(c.progress)}` : `${fmt(c.progress)} / ${fmt(c.goal)}`;
+    return `<div class="item ch ${c.done ? 'equipped' : ''}"><div class="top"><span class="icon">${c.done ? '✅' : c.icon}</span>
+      <div><div class="name">${esc(c.text)}</div><div class="desc">${c.done ? 'Complete!' : prog}</div></div></div>
+      <div class="upbar"><div style="width:${pct}%"></div></div>
+      <div class="ms-reward">${c.done ? `✓ +${fmt(c.reward)} 🪙 earned` : `Reward 🪙 ${fmt(c.reward)}`}</div></div>`;
+  }
+
+  function renderChallenges() {
+    const prof = challengeProfile();
+    CH.roll(prof);
+    const ch = prof.challenges;
+    const ends = CH.periodEnds(Date.now());
+    const now = Date.now();
+    const who = S.player ? `🌐 ${esc(S.player.name)}` : '📴 Offline profile';
+    const allDaily = ch.daily.every((c) => c.done);
+    $('#challengesBody').innerHTML = `
+      <p class="muted">${who} · Everyone gets the same challenges, with goals set to <b>your</b> bests. Rewards are paid the moment you complete one.</p>
+      <h3>☀️ Daily <span class="muted small">— resets in ${untilText(ends.dayEnd - now)}</span></h3>
+      <div class="grid">${ch.daily.map(challengeCard).join('')}</div>
+      <div class="banner ${allDaily ? 'green' : 'blue'}">${allDaily ? '🎉 All daily challenges done — bonus paid!' : `Finish all 3 dailies for a bonus of 🪙 ${fmt(CH.rewardFor(prof, false) * 2)}`}</div>
+      <h3>📅 Weekly <span class="muted small">— resets in ${untilText(ends.weekEnd - now)}</span></h3>
+      <div class="grid">${ch.weekly.map(challengeCard).join('')}</div>
+      <div class="actions"><button class="btn primary" data-action="${S.player ? 'ranked' : 'casual'}">⚽ Play a round</button></div>`;
+  }
+
+  function renderChallengeBadge() {
+    const prof = challengeProfile();
+    CH.roll(prof);
+    const ch = prof.challenges;
+    const left = ch.daily.concat(ch.weekly).filter((c) => !c.done).length;
+    $('#chBadge').textContent = left;
+    $('#chBadge').classList.toggle('hidden', !left);
+    $('#chSub').textContent = left ? `${left} to complete · rewards up to 🪙 ${fmt(CH.rewardFor(prof, true))}` : 'All done — new ones tomorrow!';
   }
 
   const PATCH_SEEN_KEY = 'ek_patch_seen';
@@ -1355,6 +1424,7 @@
         case 'leaderboard': openLeaderboard(); break;
         case 'howto': $('#coinGuide').innerHTML = coinGuideHtml(); show('howto'); break;
         case 'career': openCareer(); break;
+        case 'challenges': openChallenges(); break;
         case 'patchnotes': openPatchNotes(); break;
         case 'profile': renderProfile(); show('profile'); break;
         case 'back': goMenu(); break;

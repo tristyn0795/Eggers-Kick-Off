@@ -115,6 +115,8 @@
     { id: 'perfect', name: 'Perfect Strike', desc: 'Land a PERFECT kick', reward: 150, label: 'PERFECT!' },
     { id: 'target', name: 'On Target', desc: 'Stop the ball in any target', reward: 100, anyTarget: true },
     { id: 'henry', name: "Henry's Friend", desc: 'Stop the ball in the Duck Pond', reward: 250, target: 'Duck Pond' },
+    { id: 'restroom', name: 'Nature Calls', desc: 'Stop the ball at the Watters Creek Bathrooms', reward: 400, target: 'Watters Creek Bathrooms' },
+    { id: 'groceries', name: 'Grocery Run', desc: 'Stop the ball at Market Street', reward: 150, target: 'Market Street' },
     { id: 'bullseye', name: 'Bullseye!', desc: 'Stop the ball in any bullseye', reward: 300, ring: 'BULLSEYE' },
     { id: 'corner', name: 'Corner Office', desc: 'Bullseye the Click Wise Design Office', reward: 3000, target: 'Click Wise Design Office', ring: 'BULLSEYE' },
     { id: 'r2000', name: 'Solid Round', desc: 'Score 2,000 in one round', reward: 300, round: 2000 },

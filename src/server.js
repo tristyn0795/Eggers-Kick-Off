@@ -8,6 +8,7 @@ const { WebSocketServer } = require('ws');
 const P = require('../shared/physics');
 const C = require('../shared/catalog');
 const K = require('../shared/career');
+const CH = require('../shared/challenges');
 const { createStore, NameTakenError } = require('./store');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -96,6 +97,7 @@ function publicPlayer(p) {
     daily: p.daily || {},
     hasPassword: !!p.passwordHash,
     prestige: p.prestige | 0,
+    challenges: p.challenges || {},
     backup: signBackup(p),
   };
 }
@@ -238,6 +240,12 @@ async function main() {
 
   app.get('/api/me', auth, wrap(async (req) => {
     const p = req.player;
+    // Hand out today's / this week's challenges when a new period starts.
+    if (CH.roll(p)) await withLock('p:' + p.id, async () => {
+      const fresh = await store.getPlayer(p.id);
+      if (CH.roll(fresh)) await store.savePlayer(fresh);
+      p.challenges = fresh.challenges;
+    });
     return {
       player: publicPlayer(p),
       ranks: { round: await store.rankOf('round', p), kick: await store.rankOf('kick', p) },
@@ -353,6 +361,7 @@ async function main() {
         entry.c = award.coins;
         entry.lb = award.levelBonus;
         const milestones = C.checkMilestones(player, { kick: result });
+        const challenges = CH.progress(player, { kick: result });
         if (done) {
           round.finished = true;
           round.finishedAt = Date.now();
@@ -383,6 +392,8 @@ async function main() {
             player.coins += applied.outcome.reward;
             career = applied.outcome;
           }
+          const roundChallenges = CH.progress(player, { round: { score: round.score, careerWon: !!(career && career.won) } });
+          challenges.push(...roundChallenges);
           const roundMilestones = C.checkMilestones(player, { roundScore: round.score });
           summary = {
             score: round.score, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: round.score, newBestRound,
@@ -394,6 +405,7 @@ async function main() {
               levelBonus,
               career: career ? career.reward : 0,
               milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
+              challenges: roundChallenges.reduce((n, c) => n + c.reward, 0),
             },
             milestones: roundMilestones,
             nextUnlock: C.nextUnlocks(levelAfter),
@@ -402,11 +414,11 @@ async function main() {
         }
         await store.saveRound(round);
         await store.savePlayer(player);
-        return { round, player, result, points, done, summary, newBestKick, milestones, award };
+        return { round, player, result, points, done, summary, newBestKick, milestones, award, challenges };
       });
     });
 
-    const { round, player, result, points, done, summary, newBestKick, milestones, award } = out;
+    const { round, player, result, points, done, summary, newBestKick, milestones, award, challenges } = out;
     // Hold the news back until the kick has finished playing on the kicker's screen,
     // so nobody (the kicker included) sees a result while the ball is still flying.
     const ticks = P.playbackTicks(result.flightFrames);
@@ -419,7 +431,7 @@ async function main() {
     }, revealMs);
 
     return {
-      index, points, total: round.score, done, summary, newBestKick, milestones,
+      index, points, total: round.score, done, summary, newBestKick, milestones, challenges,
       earned: { coins: award.coins, levelBonus: award.levelBonus, levelAfter: award.levelAfter, levelBefore: award.levelBefore },
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,

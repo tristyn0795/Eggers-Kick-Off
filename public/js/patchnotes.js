@@ -3,8 +3,24 @@ window.EK_PATCH_NOTES = [
   {
     version: '1.4.0',
     date: '16 Oct 2026',
-    title: 'Tougher Career + password safety 🔒',
+    title: 'Daily & weekly challenges, Allen landmarks, tougher Career 🎯',
     sections: [
+      {
+        heading: '🎯 New: Daily & Weekly Challenges',
+        items: [
+          '3 new daily challenges every day and 3 bigger weekly ones every week, the same for everyone.',
+          'Goals are set from your own best kick and best round, so they fit your level. Rewards grow as you level up.',
+          'Finish all 3 dailies for a bonus. Weeklies pay 5× more. Find them under 🎯 Challenges on the menu.',
+        ],
+      },
+      {
+        heading: '📍 Hometown landmarks (Allen, TX)',
+        items: [
+          'New targets near the Click Wise office: Market Street (550 m), Celebration Park (1,500 m), the Watters Creek Bathrooms (2,200 m) and Allen Premium Outlets (2,950 m).',
+          'The big stadium is now Allen Eagle Stadium. Go Eagles! 🦅',
+          'New milestones: "Grocery Run" (Market Street) and "Nature Calls" (Watters Creek Bathrooms).',
+        ],
+      },
       {
         heading: '🏆 Career is a real challenge again',
         items: [

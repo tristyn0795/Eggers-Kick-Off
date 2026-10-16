@@ -306,6 +306,10 @@
         switch (t.name) {
           case 'Coffee Cup': this.lmCoffee(cx, gy); break;
           case 'Car Park': this.lmCars(cx, gy); break;
+          case 'Market Street': this.lmMarketStreet(cx, gy); break;
+          case 'Celebration Park': this.lmCelebrationPark(cx, gy); break;
+          case 'Watters Creek Bathrooms': this.lmWattersCreek(cx, gy); break;
+          case 'Allen Premium Outlets': this.lmOutlets(cx, gy); break;
           case 'Duck Pond': this.lmPond(cx, gy); break;
           case 'Water Tower': this.lmTower(cx, gy); break;
           case 'Pizza Shack': this.lmPizza(cx, gy); break;
@@ -327,7 +331,7 @@
           case 'Castle': this.lmCastle(cx, gy); break;
           case 'Wind Farm': this.lmWindFarm(cx, gy); break;
           case 'Glacier': this.lmGlacier(cx, gy); break;
-          case 'Stadium': this.lmStadium(cx, gy); break;
+          case 'Allen Eagle Stadium': this.lmStadium(cx, gy); break;
           case 'Space Elevator': this.lmElevator(cx, gy); break;
           case 'Mars Colony': this.lmMars(cx, gy); break;
           case 'Black Hole': this.lmBlackHole(cx, gy); break;
@@ -690,6 +694,10 @@
       ctx.fillStyle = '#e53935';
       ctx.fillRect(x - 55 * s, gy - 18 * s, 110 * s, 5 * s);
       ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.max(8, 4 * s)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ALLEN EAGLES', x, gy - 13.8 * s);
+      ctx.fillStyle = '#fff';
       for (const dx of [-50, 50]) {
         ctx.fillRect(x + dx * s - 0.6 * s, gy - 60 * s, 1.2 * s, 32 * s);
         ctx.fillRect(x + dx * s - 5 * s, gy - 64 * s, 10 * s, 4 * s);
@@ -762,6 +770,122 @@
       ctx.beginPath(); ctx.arc(x, gy - 53 * s, 4 * s, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = `rgba(0,191,165,${0.15 * pulse})`;
       ctx.beginPath(); ctx.arc(x, gy - 53 * s, 14 * s, 0, Math.PI * 2); ctx.fill();
+    }
+
+    /** Shared helper: a little roadside sign with a label. */
+    lmSign(x, gy, s, text, bg, fg) {
+      const ctx = this.ctx;
+      ctx.font = `800 ${Math.max(8, 2.6 * s)}px system-ui`;
+      const w = ctx.measureText(text).width + 3 * s;
+      ctx.fillStyle = '#5d4037';
+      ctx.fillRect(x - 0.4 * s, gy - 7 * s, 0.8 * s, 7 * s);
+      ctx.fillStyle = bg;
+      this.roundRect(x - w / 2, gy - 11 * s, w, 4.4 * s, 0.8 * s);
+      ctx.fill();
+      ctx.fillStyle = fg || '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, x, gy - 7.9 * s);
+    }
+
+    lmMarketStreet(cx, gy) {
+      const s = this.lmScale(2.2), ctx = this.ctx;
+      const x = cx + 30 * s, w = 34 * s, h = 12 * s;
+      ctx.fillStyle = '#efe6d8';
+      ctx.fillRect(x - w / 2, gy - h, w, h);
+      ctx.fillStyle = '#8d6e63';
+      ctx.fillRect(x - w / 2 - 1 * s, gy - h - 1.4 * s, w + 2 * s, 1.6 * s);
+      // striped awning
+      for (let i = 0; i < 10; i++) {
+        ctx.fillStyle = i % 2 ? '#ffffff' : '#c62828';
+        ctx.fillRect(x - w / 2 + i * (w / 10), gy - h + 0.4 * s, w / 10, 2.2 * s);
+      }
+      ctx.fillStyle = '#90caf9';
+      ctx.fillRect(x - w / 2 + 2 * s, gy - 7.5 * s, 9 * s, 5 * s);
+      ctx.fillRect(x + w / 2 - 11 * s, gy - 7.5 * s, 9 * s, 5 * s);
+      ctx.fillStyle = '#5d4037';
+      ctx.fillRect(x - 3 * s, gy - 8 * s, 6 * s, 8 * s);
+      ctx.fillStyle = '#c62828';
+      ctx.font = `800 ${Math.max(8, 2.8 * s)}px Georgia, serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Market Street', x, gy - h - 2.4 * s);
+      // shopping carts
+      for (const dx of [-24, -20]) {
+        ctx.strokeStyle = '#9e9e9e';
+        ctx.lineWidth = Math.max(1, 0.3 * s);
+        ctx.strokeRect(x + dx * s, gy - 2.6 * s, 2.6 * s, 1.6 * s);
+        ctx.fillStyle = '#424242';
+        ctx.beginPath(); ctx.arc(x + dx * s + 0.5 * s, gy - 0.4 * s, 0.35 * s, 0, Math.PI * 2); ctx.arc(x + dx * s + 2.1 * s, gy - 0.4 * s, 0.35 * s, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    lmCelebrationPark(cx, gy) {
+      const s = this.lmScale(1.8), ctx = this.ctx;
+      const x = cx + 40 * s;
+      // pavilion
+      ctx.fillStyle = '#795548';
+      for (const dx of [-8, 8]) ctx.fillRect(x + dx * s - 0.5 * s, gy - 7 * s, 1 * s, 7 * s);
+      ctx.fillStyle = '#2e7d32';
+      ctx.beginPath(); ctx.moveTo(x - 11 * s, gy - 7 * s); ctx.lineTo(x, gy - 12 * s); ctx.lineTo(x + 11 * s, gy - 7 * s); ctx.fill();
+      // playground slide
+      const px = x + 18 * s;
+      ctx.strokeStyle = '#1565c0'; ctx.lineWidth = Math.max(1.5, 0.5 * s);
+      ctx.beginPath(); ctx.moveTo(px, gy); ctx.lineTo(px, gy - 6 * s); ctx.stroke();
+      ctx.strokeStyle = '#fdd835'; ctx.lineWidth = Math.max(2, 0.9 * s);
+      ctx.beginPath(); ctx.moveTo(px, gy - 6 * s); ctx.quadraticCurveTo(px + 3 * s, gy - 1 * s, px + 7 * s, gy - 0.3 * s); ctx.stroke();
+      // trees
+      for (const dx of [-22, 30]) {
+        ctx.fillStyle = '#6d4c41'; ctx.fillRect(x + dx * s - 0.5 * s, gy - 5 * s, 1 * s, 5 * s);
+        ctx.fillStyle = '#43a047'; ctx.beginPath(); ctx.arc(x + dx * s, gy - 7 * s, 3.4 * s, 0, Math.PI * 2); ctx.fill();
+      }
+      this.lmSign(x - 36 * s, gy, s, 'CELEBRATION PARK', '#2e7d32');
+    }
+
+    lmWattersCreek(cx, gy) {
+      const s = this.lmScale(2.2), ctx = this.ctx;
+      const x = cx + 28 * s;
+      // the creek and a little footbridge
+      ctx.fillStyle = '#4fc3f7';
+      ctx.beginPath(); ctx.ellipse(x - 16 * s, gy + 1, 9 * s, 1 + 0.6 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8d6e63'; ctx.lineWidth = Math.max(1.5, 0.6 * s);
+      ctx.beginPath(); ctx.moveTo(x - 23 * s, gy - 0.3 * s); ctx.quadraticCurveTo(x - 16 * s, gy - 3.5 * s, x - 9 * s, gy - 0.3 * s); ctx.stroke();
+      // stone restroom building
+      const w = 16 * s, h = 8 * s;
+      ctx.fillStyle = '#d7ccc8';
+      ctx.fillRect(x - w / 2, gy - h, w, h);
+      ctx.fillStyle = '#5d4037';
+      ctx.beginPath(); ctx.moveTo(x - w / 2 - 1.5 * s, gy - h); ctx.lineTo(x, gy - h - 4 * s); ctx.lineTo(x + w / 2 + 1.5 * s, gy - h); ctx.fill();
+      for (const [dx, icon] of [[-4, '🚹'], [4, '🚺']]) {
+        ctx.fillStyle = '#37474f';
+        ctx.fillRect(x + dx * s - 2 * s, gy - 6 * s, 4 * s, 6 * s);
+        ctx.font = `${Math.max(7, 2.4 * s)}px system-ui`;
+        ctx.textAlign = 'center';
+        ctx.fillText(icon, x + dx * s, gy - 6.5 * s);
+      }
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 ${Math.max(7, 1.5 * s)}px system-ui`;
+      ctx.fillText('RESTROOMS', x, gy - h - 0.9 * s);
+      this.lmSign(x + 22 * s, gy, s, 'WATTERS CREEK', '#5c6bc0');
+    }
+
+    lmOutlets(cx, gy) {
+      const s = this.lmScale(1.6), ctx = this.ctx;
+      const x = cx + 45 * s;
+      const cols = ['#ef6c00', '#00897b', '#5e35b1', '#c62828', '#1565c0'];
+      for (let i = 0; i < 5; i++) {
+        const sx = x - 25 * s + i * 10 * s;
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(sx, gy - 10 * s, 9.5 * s, 10 * s);
+        ctx.fillStyle = cols[i];
+        ctx.fillRect(sx - 0.3 * s, gy - 7.5 * s, 10.1 * s, 1.6 * s);
+        ctx.fillStyle = '#90caf9';
+        ctx.fillRect(sx + 1.5 * s, gy - 5 * s, 6.5 * s, 5 * s);
+      }
+      ctx.fillStyle = '#37474f';
+      ctx.fillRect(x - 26 * s, gy - 13.5 * s, 52 * s, 3.4 * s);
+      ctx.fillStyle = '#fff';
+      ctx.font = `800 ${Math.max(7, 2.2 * s)}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText('ALLEN PREMIUM OUTLETS', x, gy - 11.1 * s);
     }
 
     lmTower(cx, gy) {

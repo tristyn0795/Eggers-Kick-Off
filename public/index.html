@@ -64,6 +64,7 @@
           <button data-action="casual">🌤️ Casual Round<small>Offline</small></button>
           <button data-action="freekick">♾️ Free Kick<small>Offline practice</small></button>
         </div>
+        <button data-action="challenges" class="challenges-btn">🎯 Daily &amp; Weekly Challenges <span class="badge hidden" id="chBadge">0</span><small id="chSub">New challenges every day and week</small></button>
         <div class="row">
           <button data-action="shop">🛒 Locker &amp; Shop</button>
           <button data-action="leaderboard">🏆 Leaderboard</button>
@@ -159,6 +160,15 @@
     </div>
   </section>
 
+  <!-- Challenges -->
+  <section id="screen-challenges" class="screen ui hidden">
+    <div class="card wide">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>🎯 Challenges</h2>
+      <div id="challengesBody"></div>
+    </div>
+  </section>
+
   <!-- How to play -->
   <section id="screen-howto" class="screen ui hidden">
     <div class="card">
@@ -219,6 +229,7 @@
   <script src="/shared/physics.js"></script>
   <script src="/shared/catalog.js"></script>
   <script src="/shared/career.js"></script>
+  <script src="/shared/challenges.js"></script>
   <script src="/js/patchnotes.js"></script>
   <script src="/js/audio.js"></script>
   <script src="/js/render.js"></script>

@@ -310,6 +310,7 @@
         extra: res.extra || null,
         earned: res.earned || null,
         milestones: res.milestones || null,
+        challenges: res.challenges || null,
         index: k.index,
         henry: k.henryHappy,
       });

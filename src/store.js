@@ -72,6 +72,7 @@ class PgStore {
       ALTER TABLE players ADD COLUMN IF NOT EXISTS password_hash TEXT;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS daily JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS prestige INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS challenges JSONB NOT NULL DEFAULT '{}'::jsonb;
       CREATE TABLE IF NOT EXISTS player_tokens (
         token_hash TEXT PRIMARY KEY,
         player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -104,6 +105,7 @@ class PgStore {
       passwordHash: r.password_hash || null,
       daily: r.daily || {},
       prestige: r.prestige || 0,
+      challenges: r.challenges || {},
     };
   }
 
@@ -178,12 +180,12 @@ class PgStore {
       await this.pool.query(
         `UPDATE players SET name=$2, name_key=$3, coins=$4, xp=$5, upgrades=$6, owned=$7, equipped=$8,
            best_round=$9, best_round_id=$10, best_kick=$11, best_kick_round_id=$12, best_kick_index=$13,
-           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18, prestige=$19
+           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18, prestige=$19, challenges=$20
          WHERE id=$1`,
         [p.id, p.name, p.nameKey, p.coins, p.xp, JSON.stringify(p.upgrades), JSON.stringify(p.owned),
           JSON.stringify(p.equipped), p.bestRound, p.bestRoundId, p.bestKick, p.bestKickRoundId,
           p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {}),
-          p.passwordHash || null, JSON.stringify(p.daily || {}), p.prestige | 0]
+          p.passwordHash || null, JSON.stringify(p.daily || {}), p.prestige | 0, JSON.stringify(p.challenges || {})]
       );
     } catch (e) {
       if (e.code === '23505') throw new NameTakenError();

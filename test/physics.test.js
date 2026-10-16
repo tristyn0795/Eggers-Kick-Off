@@ -47,7 +47,8 @@ test('topgolf scoring: rings, bonus and double final ball', () => {
   const hit = P.targetFor(office.x + 1);
   assert.strictEqual(hit.ring, 'BULLSEYE');
   assert.strictEqual(hit.points, office.pts * 3);
-  assert.strictEqual(P.targetFor(2200), null);
+  assert.strictEqual(P.targetFor(3650), null);
+  assert.strictEqual(P.targetFor(2200).name, 'Watters Creek Bathrooms');
   assert.strictEqual(P.targetFor(3300).name, 'Gas Station');
   const fake = { distance: 1000, target: null };
   assert.strictEqual(P.scoreKick(fake, 0, 10), 100);
@@ -178,4 +179,38 @@ test('career stays challenging: bosses scale with your upgrades, and every loss 
   assert.ok(K.skillDelta(798, mo, false) > K.skillDelta(798, K.bossById('henry'), false), 'losing to a weaker boss hurts more');
   const kicks = K.cpuRound(99, K.bossById('ivy'), gear(5)).kicks;
   assert.deepStrictEqual(K.cpuKick(99, K.bossById('ivy'), 4, gear(5)), kicks[4], 'kicks can be revealed one at a time');
+});
+
+test('daily & weekly challenges: shared picks, personal goals, paid once, bonus for all dailies', () => {
+  const CH = require('../shared/challenges');
+  const now = Date.UTC(2026, 9, 16, 12);
+  const rookie = C.newProfile();
+  const pro = Object.assign(C.newProfile(), { bestKick: 20000, bestRound: 30000, xp: C.xpForLevel(40) });
+  CH.roll(rookie, now);
+  CH.roll(pro, now);
+  assert.strictEqual(rookie.challenges.daily.length, 3);
+  assert.strictEqual(rookie.challenges.weekly.length, 3);
+  assert.deepStrictEqual(rookie.challenges.daily.map((c) => c.id), pro.challenges.daily.map((c) => c.id), 'same challenges for everyone');
+  assert.ok(pro.challenges.daily[0].reward > rookie.challenges.daily[0].reward, 'rewards scale with level');
+  assert.strictEqual(CH.roll(rookie, now), false, 'no re-roll within the same day');
+  assert.strictEqual(CH.roll(rookie, now + 86400000), true, 'new day, new dailies');
+  // Force known dailies and complete them all.
+  const p = C.newProfile();
+  CH.roll(p, now);
+  p.challenges.daily = [
+    { id: 'perfects', goal: 1, progress: 0, done: false, reward: 100, text: 'a' },
+    { id: 'rounds', goal: 1, progress: 0, done: false, reward: 100, text: 'b' },
+    { id: 'spot', goal: 1, target: 'Watters Creek Bathrooms', progress: 0, done: false, reward: 100, text: 'c' },
+  ];
+  const coins = p.coins;
+  const a = CH.progress(p, { kick: { distance: 2200, label: 'PERFECT!', target: { name: 'Watters Creek Bathrooms', ring: 'INNER RING' }, padsHit: 0 } }, now);
+  assert.deepStrictEqual(a.map((x) => x.text).filter((t) => t !== 'All 3 daily challenges complete!'), ['a', 'c']);
+  const b = CH.progress(p, { round: { score: 500 } }, now);
+  assert.ok(b.some((x) => x.bonus), 'bonus when all three dailies are done');
+  assert.strictEqual(CH.progress(p, { round: { score: 500 } }, now).filter((x) => !x.weekly).length, 0, 'paid once');
+  assert.ok(p.coins - coins >= 300);
+  // Allen nods are on the map.
+  for (const n of ['Market Street', 'Watters Creek Bathrooms', 'Celebration Park', 'Allen Premium Outlets', 'Allen Eagle Stadium']) {
+    assert.ok(P.TARGETS.some((t) => t.name === n), n);
+  }
 });

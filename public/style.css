@@ -387,3 +387,9 @@ button.gold small { color: rgba(59, 42, 0, 0.75) !important; }
 /* ---------- v1.4 ---------- */
 .pw-form { gap: 8px; margin: 6px 0 10px; }
 .pw-form .error { margin: 0; }
+
+.challenges-btn { position: relative; }
+.challenges-btn .badge { position: absolute; top: 8px; right: 10px; }
+.item.ch .upbar { margin-top: 2px; }
+.item.ch .ms-reward { font-weight: 900; color: #b07800; }
+.item.ch.equipped .ms-reward { color: var(--green-dark); }
