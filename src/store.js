@@ -69,6 +69,14 @@ class PgStore {
       ALTER TABLE players ADD COLUMN IF NOT EXISTS milestones JSONB NOT NULL DEFAULT '[]'::jsonb;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS career JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE rounds ADD COLUMN IF NOT EXISTS career TEXT;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS password_hash TEXT;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS daily JSONB NOT NULL DEFAULT '{}'::jsonb;
+      CREATE TABLE IF NOT EXISTS player_tokens (
+        token_hash TEXT PRIMARY KEY,
+        player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     `);
   }
 
@@ -92,6 +100,8 @@ class PgStore {
       roundsPlayed: r.rounds_played,
       milestones: r.milestones || [],
       career: r.career || {},
+      passwordHash: r.password_hash || null,
+      daily: r.daily || {},
     };
   }
 
@@ -129,8 +139,31 @@ class PgStore {
   }
 
   async getPlayerByTokenHash(h) {
-    const { rows } = await this.pool.query('SELECT * FROM players WHERE token_hash = $1', [h]);
+    const { rows } = await this.pool.query(
+      `SELECT * FROM players WHERE token_hash = $1
+       UNION ALL
+       SELECT p.* FROM player_tokens t JOIN players p ON p.id = t.player_id WHERE t.token_hash = $1
+       LIMIT 1`, [h]);
     return PgStore.rowToPlayer(rows[0]);
+  }
+
+  async getPlayerByNameKey(nameKey) {
+    const { rows } = await this.pool.query('SELECT * FROM players WHERE name_key = $1', [nameKey]);
+    return PgStore.rowToPlayer(rows[0]);
+  }
+
+  async addToken(playerId, tokenHash) {
+    await this.pool.query('INSERT INTO player_tokens (token_hash, player_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [tokenHash, playerId]);
+  }
+
+  async getSetting(key) {
+    const { rows } = await this.pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+    return rows[0] ? rows[0].value : null;
+  }
+
+  async setSetting(key, value) {
+    await this.pool.query('INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING', [key, value]);
+    return this.getSetting(key);
   }
 
   async getPlayer(id) {
@@ -143,11 +176,12 @@ class PgStore {
       await this.pool.query(
         `UPDATE players SET name=$2, name_key=$3, coins=$4, xp=$5, upgrades=$6, owned=$7, equipped=$8,
            best_round=$9, best_round_id=$10, best_kick=$11, best_kick_round_id=$12, best_kick_index=$13,
-           rounds_played=$14, milestones=$15, career=$16
+           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18
          WHERE id=$1`,
         [p.id, p.name, p.nameKey, p.coins, p.xp, JSON.stringify(p.upgrades), JSON.stringify(p.owned),
           JSON.stringify(p.equipped), p.bestRound, p.bestRoundId, p.bestKick, p.bestKickRoundId,
-          p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {})]
+          p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {}),
+          p.passwordHash || null, JSON.stringify(p.daily || {})]
       );
     } catch (e) {
       if (e.code === '23505') throw new NameTakenError();
@@ -240,7 +274,9 @@ class FileStore {
     if (fs.existsSync(this.file)) {
       this.data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
     }
-    this.byToken = new Map();
+    this.data.tokens = this.data.tokens || {};
+    this.data.settings = this.data.settings || {};
+    this.byToken = new Map(Object.entries(this.data.tokens));
     this.byName = new Map();
     for (const p of Object.values(this.data.players)) {
       this.byToken.set(p.tokenHash, p.id);
@@ -295,6 +331,29 @@ class FileStore {
 
   async getPlayer(id) {
     return this.clone(this.data.players[id]);
+  }
+
+  async getPlayerByNameKey(nameKey) {
+    const id = this.byName.get(nameKey);
+    return id ? this.clone(this.data.players[id]) : null;
+  }
+
+  async addToken(playerId, tokenHash) {
+    this.data.tokens[tokenHash] = playerId;
+    this.byToken.set(tokenHash, playerId);
+    this.persist();
+  }
+
+  async getSetting(key) {
+    return this.data.settings[key] == null ? null : this.data.settings[key];
+  }
+
+  async setSetting(key, value) {
+    if (this.data.settings[key] == null) {
+      this.data.settings[key] = value;
+      this.persist();
+    }
+    return this.data.settings[key];
   }
 
   async savePlayer(p) {
@@ -370,7 +429,17 @@ class FileStore {
 
 async function createStore() {
   const url = process.env.DATABASE_URL;
-  const store = url ? new PgStore(url) : new FileStore(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
+  const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  const hosted = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV === 'production');
+  if (!url && hosted && !volume && !process.env.DATA_DIR && process.env.ALLOW_EPHEMERAL_STORAGE !== 'true') {
+    // A JSON file on a hosted container's own disk is wiped on every deploy. Refuse to start
+    // so the deploy fails and the previous (working) deployment keeps serving players.
+    throw new Error(
+      'Refusing to start: no DATABASE_URL. Player progress would be erased on the next deploy. ' +
+      'Add a Postgres database and reference its DATABASE_URL on this service (or attach a volume).'
+    );
+  }
+  const store = url ? new PgStore(url) : new FileStore(process.env.DATA_DIR || volume || path.join(__dirname, '..', 'data'));
   await store.init();
   return store;
 }

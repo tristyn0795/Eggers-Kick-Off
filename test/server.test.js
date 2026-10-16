@@ -31,7 +31,7 @@ function bestFrame(seed, upgrades) {
 test.before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eko-'));
   proc = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT), DATA_DIR: dir, DATABASE_URL: '' }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), DATA_DIR: dir, DATABASE_URL: process.env.TEST_DATABASE_URL || '' }),
     stdio: 'pipe',
   });
   for (let i = 0; i < 50; i++) {
@@ -92,6 +92,50 @@ test('full online flow: profile, round, leaderboard, shop, challenge', async () 
   const replay = await api(`/api/round/${roundId}`);
   assert.strictEqual(replay.body.kicks.length, 10);
   assert.strictEqual(replay.body.name, 'Test Kicker');
+});
+
+test('coins are paid per kick, daily bonus on the first round', async () => {
+  const token = (await api('/api/player', { name: 'Coin Counter' })).body.token;
+  const { roundId, baseSeed, upgrades } = (await api('/api/round/start', {}, token)).body;
+  let coins = 0;
+  let last;
+  for (let i = 0; i < 10; i++) {
+    last = await api('/api/round/kick', { roundId, index: i, frame: bestFrame(P.kickSeed(baseSeed, i), upgrades) }, token);
+    assert.strictEqual(last.body.earned.coins, Math.floor(last.body.points / 8));
+    if (i < 9) {
+      assert.ok(last.body.player.coins >= coins + last.body.earned.coins, 'wallet grows during the round');
+      coins = last.body.player.coins;
+    }
+  }
+  const b = last.body.summary.coinBreakdown;
+  assert.strictEqual(b.daily, 50, 'first round of the day pays the daily bonus');
+  assert.strictEqual(b.completion, 20);
+  assert.strictEqual(last.body.summary.daily.streak, 1);
+});
+
+test('progress survives: password login on another device and restore from a device backup', async () => {
+  const created = await api('/api/player', { name: 'Safe Sam' });
+  const token = created.body.token;
+  assert.ok(created.body.player.backup, 'every profile response carries a signed backup');
+  assert.strictEqual((await api('/api/login', { name: 'Safe Sam', password: 'kickit' })).status, 400, 'no password yet');
+  assert.strictEqual((await api('/api/me/password', { password: 'kickit' }, token)).status, 200);
+  assert.strictEqual((await api('/api/login', { name: 'safe sam', password: 'nope' })).status, 401);
+  const login = await api('/api/login', { name: 'safe sam', password: 'kickit' });
+  assert.strictEqual(login.status, 200);
+  assert.notStrictEqual(login.body.token, token);
+  assert.strictEqual((await api('/api/me', null, login.body.token)).body.player.name, 'Safe Sam');
+  assert.strictEqual((await api('/api/me', null, token)).status, 200, 'the original device stays logged in');
+
+  // A tampered backup is rejected.
+  const backup = created.body.player.backup;
+  const [body, sig] = backup.split('.');
+  const forged = JSON.parse(Buffer.from(body, 'base64url').toString());
+  forged.coins = 999999;
+  forged.id = 'forged-id';
+  const forgedStr = `${Buffer.from(JSON.stringify(forged)).toString('base64url')}.${sig}`;
+  assert.strictEqual((await api('/api/restore', { token: 'x'.repeat(32), backup: forgedStr })).status, 400);
+  // A profile that still exists is not duplicated.
+  assert.strictEqual((await api('/api/restore', { token: 'y'.repeat(32), backup })).status, 409);
 });
 
 test('career match is verified by the server', async () => {

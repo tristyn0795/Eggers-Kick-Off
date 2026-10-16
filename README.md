@@ -24,8 +24,10 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 - A round is 10 kicks, and the **last ball scores double**.
 
 ### Progression
-- **Coins:** finishing a round pays 25 + 1 coin per 6 points. Free Kick pays 1 coin per 8 points per kick. Level-ups pay bonus
-  coins, 22 **milestones** pay one-time rewards, and Career bosses pay a bounty on your first win.
+- **Coins** are paid after every kick (1 per 8 points; Free Kick 1 per 10), plus a 20-coin round completion bonus,
+  a **daily streak** bonus (50 × streak, max 350), level-up bonuses, 22 one-time **milestones** and Career boss bounties.
+- Prices are built for a long grind: each upgrade level costs 1.6× the last (maxing everything ≈ 284k coins) and
+  cosmetics run up to 100k.
 - Every round's points also count as **XP**. Something new unlocks at almost every level up to 30.
 - **Upgrades** (10 levels each, levels 6–10 are long-haul goals): Power Boots, Pro Ball, Sweet Spot Training,
   Slow-Mo Focus, Aero Laces, Lucky Socks.
@@ -76,6 +78,17 @@ That's it: WebSockets work out of the box on Railway.
 > That's fine locally, but on Railway the file is wiped on every deploy unless you attach a
 > volume and point `DATA_DIR` at it. Use Postgres.
 
+### Keeping player progress safe
+- **Postgres is required in production.** On Railway (or with `NODE_ENV=production`) the server refuses to start
+  without `DATABASE_URL`, so a misconfigured deploy fails its health check and Railway keeps the previous version running.
+  (Set `ALLOW_EPHEMERAL_STORAGE=true` only for throwaway test deploys.)
+- **Device backups:** every profile response includes a signed (HMAC) snapshot of the player's online and career
+  progress, which the browser keeps. If the server ever loses a profile, the game restores it automatically.
+  Snapshots can't be edited without breaking the signature.
+- **Set `PROFILE_SECRET`** (any long random string) on the Railway service. Without it, the signing key lives in the
+  database, which is fine until the database itself is replaced. With it, backups survive even that.
+- **Logins:** players can set a password in Profile and log in by kicker name on any device.
+
 Environment variables:
 
 | Var | Default | Purpose |
@@ -84,6 +97,8 @@ Environment variables:
 | `DATABASE_URL` | – | Postgres connection string (recommended) |
 | `DATA_DIR` | `./data` | JSON-file storage location when no database |
 | `PGSSL` | – | Set to `disable` if your Postgres doesn't use SSL |
+| `PROFILE_SECRET` | stored in DB | Signing key for progress backups — set it so backups survive a database replacement |
+| `ALLOW_EPHEMERAL_STORAGE` | – | `true` lets a hosted server run without a database (data is lost on deploy!) |
 
 ## Run locally
 ```bash

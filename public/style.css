@@ -367,3 +367,10 @@ button.gold small { color: rgba(59, 42, 0, 0.75) !important; }
   .career-head { grid-template-columns: 1fr; }
   .boss-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- v1.2: fluid coins ---------- */
+.hud-pill.coins b { color: #b07800; }
+.hud-pill.bump { animation: bump 0.45s ease; }
+@keyframes bump { 30% { transform: scale(1.18); } }
+.coin-gain { color: #b07800; font-weight: 900; }
+.banner a { color: inherit; font-weight: 900; }

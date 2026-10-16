@@ -5,62 +5,71 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // Ten levels per upgrade. Levels 6-10 are the long-haul goals.
-  const UPGRADE_COSTS = [120, 300, 650, 1100, 1700, 2500, 3500, 4800, 6400, 8500];
+  // Ten levels per upgrade. Each level costs UPGRADE_GROWTH× the last, so the
+  // first few come quickly and levels 6-10 are a long grind.
+  const UPGRADE_BASE = 250;
+  const UPGRADE_GROWTH = 1.6;
   const UPGRADE_LEVEL_REQ = [1, 2, 3, 5, 7, 9, 12, 15, 18, 22];
-  const MAX_UPGRADE = UPGRADE_COSTS.length;
+  const MAX_UPGRADE = UPGRADE_LEVEL_REQ.length;
 
   const UPGRADES = [
-    { id: 'boots', name: 'Power Boots', icon: '👟', desc: 'More kick power: +6% per level, +4% from level 6.' },
-    { id: 'ball', name: 'Pro Ball', icon: '⚽', desc: 'Bouncier ball that keeps rolling further.' },
-    { id: 'training', name: 'Sweet Spot Training', icon: '🎯', desc: 'Wider sweet spot — easier PERFECT kicks.' },
-    { id: 'focus', name: 'Slow-Mo Focus', icon: '⏱️', desc: 'Jason juggles slower, so timing is easier.' },
-    { id: 'aero', name: 'Aero Laces', icon: '💨', desc: 'Less air drag on long flights.' },
-    { id: 'luck', name: 'Lucky Socks', icon: '🧦', desc: 'More bounce pads, fewer puddles on the field.' },
+    { id: 'boots', name: 'Power Boots', icon: '👟', price: 1.25, desc: 'More kick power: +6% per level, +4% from level 6.' },
+    { id: 'ball', name: 'Pro Ball', icon: '⚽', price: 1.25, desc: 'Bouncier ball that keeps rolling further.' },
+    { id: 'training', name: 'Sweet Spot Training', icon: '🎯', price: 1.0, desc: 'Wider sweet spot — easier PERFECT kicks.' },
+    { id: 'focus', name: 'Slow-Mo Focus', icon: '⏱️', price: 0.85, desc: 'Jason juggles slower, so timing is easier.' },
+    { id: 'aero', name: 'Aero Laces', icon: '💨', price: 1.0, desc: 'Less air drag on long flights.' },
+    { id: 'luck', name: 'Lucky Socks', icon: '🧦', price: 0.9, desc: 'More bounce pads, fewer puddles on the field.' },
   ];
+
+  /** Coins to buy the upgrade's next level when it's currently at `level`. */
+  function upgradeCost(id, level) {
+    const up = UPGRADES.find((u) => u.id === id);
+    const raw = UPGRADE_BASE * (up ? up.price : 1) * Math.pow(UPGRADE_GROWTH, level);
+    return raw < 1000 ? Math.round(raw / 10) * 10 : Math.round(raw / 50) * 50;
+  }
 
   const OUTFITS = [
     { id: 'gi', name: "Jason's Black Gi", cost: 0, level: 1, shirt: '#1c1c1e', shorts: '#1c1c1e', socks: '#1c1c1e', pattern: 'gi', belt: '#f2f2f2', beltTip: '#111111', medal: 'silver', pants: true, longSleeves: true, sandals: true },
     { id: 'tee', name: 'Click Wise Tee', cost: 0, level: 1, shirt: '#047dc3', shorts: '#1b2a3a', socks: '#ffffff' },
-    { id: 'polo', name: 'Click Wise Green Polo', cost: 150, level: 1, shirt: '#4caf50', shorts: '#1b2a3a', socks: '#4caf50' },
-    { id: 'jersey', name: 'Striker Jersey', cost: 400, level: 3, shirt: '#d32f2f', shorts: '#ffffff', socks: '#d32f2f', pattern: 'stripes', alt: '#ffffff' },
-    { id: 'suit', name: 'Client Meeting Suit', cost: 900, level: 5, shirt: '#22304a', shorts: '#22304a', socks: '#111111', pattern: 'suit', alt: '#ffffff', tie: '#c62828', pants: true, longSleeves: true, shoe: '#3e2723' },
-    { id: 'whitegi', name: 'Competition White Gi', cost: 1200, level: 6, shirt: '#f4f4f2', shorts: '#f4f4f2', socks: '#f4f4f2', pattern: 'gi', belt: '#1565c0', beltTip: '#111111', medal: 'silver', pants: true, longSleeves: true, sandals: true },
-    { id: 'hawaiian', name: 'Friday Hawaiian', cost: 1500, level: 7, shirt: '#ff7043', shorts: '#f5deb3', socks: '#ffffff', pattern: 'flowers', alt: '#ffeb3b' },
-    { id: 'ninja', name: 'Night Ninja', cost: 3000, level: 10, shirt: '#263238', shorts: '#263238', socks: '#263238', pattern: 'gi', belt: '#c62828', beltTip: '#c62828', pants: true, longSleeves: true },
-    { id: 'referee', name: 'Referee', cost: 3500, level: 11, shirt: '#111111', shorts: '#111111', socks: '#111111', pattern: 'stripes', alt: '#f5f5f5' },
-    { id: 'golden', name: 'Golden Boot Kit', cost: 5000, level: 12, shirt: '#ffc107', shorts: '#ffa000', socks: '#ffc107', pattern: 'shine', alt: '#fff8e1' },
-    { id: 'blackbelt', name: 'Black Belt Promotion', cost: 6000, level: 14, shirt: '#1c1c1e', shorts: '#1c1c1e', socks: '#1c1c1e', pattern: 'gi', belt: '#111111', beltTip: '#c62828', medal: 'gold', pants: true, longSleeves: true, sandals: true },
-    { id: 'astro', name: 'Astronaut', cost: 8000, level: 15, shirt: '#eceff1', shorts: '#cfd8dc', socks: '#90a4ae', pattern: 'astro', alt: '#047dc3', pants: true, longSleeves: true, shoe: '#eceff1' },
-    { id: 'tux', name: 'Award Night Tux', cost: 12000, level: 19, shirt: '#0d0d0d', shorts: '#0d0d0d', socks: '#0d0d0d', pattern: 'suit', alt: '#ffffff', tie: '#0d0d0d', pants: true, longSleeves: true, shoe: '#000000' },
-    { id: 'coralbelt', name: 'Coral Belt Master', cost: 16000, level: 21, shirt: '#f4f4f2', shorts: '#f4f4f2', socks: '#f4f4f2', pattern: 'gi', belt: '#d32f2f', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
-    { id: 'ceo', name: 'Click Wise CEO', cost: 22000, level: 23, shirt: '#047dc3', shorts: '#0b2f4a', socks: '#0b2f4a', pattern: 'suit', alt: '#ffffff', tie: '#4caf50', pants: true, longSleeves: true, shoe: '#111111' },
+    { id: 'polo', name: 'Click Wise Green Polo', cost: 400, level: 1, shirt: '#4caf50', shorts: '#1b2a3a', socks: '#4caf50' },
+    { id: 'jersey', name: 'Striker Jersey', cost: 1000, level: 3, shirt: '#d32f2f', shorts: '#ffffff', socks: '#d32f2f', pattern: 'stripes', alt: '#ffffff' },
+    { id: 'suit', name: 'Client Meeting Suit', cost: 2200, level: 5, shirt: '#22304a', shorts: '#22304a', socks: '#111111', pattern: 'suit', alt: '#ffffff', tie: '#c62828', pants: true, longSleeves: true, shoe: '#3e2723' },
+    { id: 'whitegi', name: 'Competition White Gi', cost: 3000, level: 6, shirt: '#f4f4f2', shorts: '#f4f4f2', socks: '#f4f4f2', pattern: 'gi', belt: '#1565c0', beltTip: '#111111', medal: 'silver', pants: true, longSleeves: true, sandals: true },
+    { id: 'hawaiian', name: 'Friday Hawaiian', cost: 3800, level: 7, shirt: '#ff7043', shorts: '#f5deb3', socks: '#ffffff', pattern: 'flowers', alt: '#ffeb3b' },
+    { id: 'ninja', name: 'Night Ninja', cost: 7500, level: 10, shirt: '#263238', shorts: '#263238', socks: '#263238', pattern: 'gi', belt: '#c62828', beltTip: '#c62828', pants: true, longSleeves: true },
+    { id: 'referee', name: 'Referee', cost: 8500, level: 11, shirt: '#111111', shorts: '#111111', socks: '#111111', pattern: 'stripes', alt: '#f5f5f5' },
+    { id: 'golden', name: 'Golden Boot Kit', cost: 12000, level: 12, shirt: '#ffc107', shorts: '#ffa000', socks: '#ffc107', pattern: 'shine', alt: '#fff8e1' },
+    { id: 'blackbelt', name: 'Black Belt Promotion', cost: 15000, level: 14, shirt: '#1c1c1e', shorts: '#1c1c1e', socks: '#1c1c1e', pattern: 'gi', belt: '#111111', beltTip: '#c62828', medal: 'gold', pants: true, longSleeves: true, sandals: true },
+    { id: 'astro', name: 'Astronaut', cost: 20000, level: 15, shirt: '#eceff1', shorts: '#cfd8dc', socks: '#90a4ae', pattern: 'astro', alt: '#047dc3', pants: true, longSleeves: true, shoe: '#eceff1' },
+    { id: 'tux', name: 'Award Night Tux', cost: 30000, level: 19, shirt: '#0d0d0d', shorts: '#0d0d0d', socks: '#0d0d0d', pattern: 'suit', alt: '#ffffff', tie: '#0d0d0d', pants: true, longSleeves: true, shoe: '#000000' },
+    { id: 'coralbelt', name: 'Coral Belt Master', cost: 40000, level: 21, shirt: '#f4f4f2', shorts: '#f4f4f2', socks: '#f4f4f2', pattern: 'gi', belt: '#d32f2f', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
+    { id: 'ceo', name: 'Click Wise CEO', cost: 55000, level: 23, shirt: '#047dc3', shorts: '#0b2f4a', socks: '#0b2f4a', pattern: 'suit', alt: '#ffffff', tie: '#4caf50', pants: true, longSleeves: true, shoe: '#111111' },
   ];
 
   const BALLS = [
     { id: 'classic', name: 'Classic', cost: 0, level: 1, base: '#ffffff', patch: '#222222' },
-    { id: 'cw', name: 'Click Wise Ball', cost: 300, level: 2, base: '#047dc3', patch: '#4caf50' },
-    { id: 'beach', name: 'Beach Ball', cost: 600, level: 4, base: '#ffffff', patch: '#ff5252', style: 'beach' },
-    { id: 'henry', name: 'Henry Ball 🪿', cost: 1000, level: 6, base: '#fffaf0', patch: '#ff8a1c', style: 'henry' },
-    { id: 'fire', name: 'Fireball', cost: 1500, level: 8, base: '#ff6d00', patch: '#ffd600', style: 'fire' },
-    { id: 'egg', name: 'The Eggers Egg', cost: 2500, level: 10, base: '#fff3d6', patch: '#e0c9a0', style: 'egg' },
-    { id: 'gold', name: 'Gold Ball', cost: 4000, level: 12, base: '#ffd54f', patch: '#ff8f00' },
-    { id: 'disco', name: 'Disco Ball', cost: 9000, level: 16, base: '#cfd8dc', patch: '#ffffff', style: 'disco' },
-    { id: 'planet', name: 'Planet Kick', cost: 20000, level: 24, base: '#ffb74d', patch: '#8d6e63', style: 'planet' },
+    { id: 'cw', name: 'Click Wise Ball', cost: 750, level: 2, base: '#047dc3', patch: '#4caf50' },
+    { id: 'beach', name: 'Beach Ball', cost: 1500, level: 4, base: '#ffffff', patch: '#ff5252', style: 'beach' },
+    { id: 'henry', name: 'Henry Ball 🪿', cost: 2500, level: 6, base: '#fffaf0', patch: '#ff8a1c', style: 'henry' },
+    { id: 'fire', name: 'Fireball', cost: 3800, level: 8, base: '#ff6d00', patch: '#ffd600', style: 'fire' },
+    { id: 'egg', name: 'The Eggers Egg', cost: 6000, level: 10, base: '#fff3d6', patch: '#e0c9a0', style: 'egg' },
+    { id: 'gold', name: 'Gold Ball', cost: 10000, level: 12, base: '#ffd54f', patch: '#ff8f00' },
+    { id: 'disco', name: 'Disco Ball', cost: 22000, level: 16, base: '#cfd8dc', patch: '#ffffff', style: 'disco' },
+    { id: 'planet', name: 'Planet Kick', cost: 50000, level: 24, base: '#ffb74d', patch: '#8d6e63', style: 'planet' },
     { id: 'mastery', name: 'Mastery Pro Ball', cost: 0, level: 1, base: '#0b2f6b', patch: '#ffd54f', style: 'mastery', career: true },
-    { id: 'moon', name: 'Moon Ball', cost: 40000, level: 30, base: '#e0e0e0', patch: '#9e9e9e', style: 'moon' },
+    { id: 'moon', name: 'Moon Ball', cost: 100000, level: 30, base: '#e0e0e0', patch: '#9e9e9e', style: 'moon' },
   ];
 
   const TRAILS = [
     { id: 'none', name: 'No Trail', cost: 0, level: 1 },
-    { id: 'dots', name: 'Dotted Line', cost: 250, level: 2 },
-    { id: 'sparkle', name: 'Sparkles', cost: 800, level: 5 },
-    { id: 'rainbow', name: 'Rainbow', cost: 2000, level: 9 },
-    { id: 'feathers', name: "Henry's Feathers", cost: 4500, level: 13 },
-    { id: 'flame', name: 'Flames', cost: 3500, level: 12 },
-    { id: 'stars', name: 'Shooting Stars', cost: 9000, level: 17 },
-    { id: 'confetti', name: 'Party Confetti', cost: 14000, level: 20 },
-    { id: 'comet', name: 'Comet Tail', cost: 25000, level: 25 },
+    { id: 'dots', name: 'Dotted Line', cost: 600, level: 2 },
+    { id: 'sparkle', name: 'Sparkles', cost: 2000, level: 5 },
+    { id: 'rainbow', name: 'Rainbow', cost: 5000, level: 9 },
+    { id: 'feathers', name: "Henry's Feathers", cost: 11000, level: 13 },
+    { id: 'flame', name: 'Flames', cost: 9000, level: 12 },
+    { id: 'stars', name: 'Shooting Stars', cost: 22000, level: 17 },
+    { id: 'confetti', name: 'Party Confetti', cost: 35000, level: 20 },
+    { id: 'comet', name: 'Comet Tail', cost: 60000, level: 25 },
   ];
 
   // One-time rewards. Checked after every kick and every round.
@@ -109,13 +118,55 @@
     return 300 * (level - 1) * (level - 1);
   }
 
-  const ROUND_COMPLETION_COINS = 25;
-  const POINTS_PER_COIN = 6;
-  const FREE_KICK_POINTS_PER_COIN = 8;
+  // Coins are paid after every kick (1 per POINTS_PER_COIN points) so the wallet ticks up as you play,
+  // plus a completion bonus, a daily streak bonus and level-up bonuses.
+  const ROUND_COMPLETION_COINS = 20;
+  const POINTS_PER_COIN = 8;
+  const FREE_KICK_POINTS_PER_COIN = 10;
+  const DAILY_BONUS_PER_DAY = 50;
+  const DAILY_BONUS_MAX_DAYS = 7;
 
+  function coinsForKick(points) {
+    return Math.floor(Math.max(0, points) / POINTS_PER_COIN);
+  }
+  /** Whole-round equivalent (per-kick coins + completion bonus). */
   function coinsForRound(score) {
     return Math.floor(score / POINTS_PER_COIN) + ROUND_COMPLETION_COINS;
   }
+
+  /**
+   * Pay out one kick: coins and XP land immediately, and any level-up bonus with them.
+   * Mutates the profile and returns what was paid.
+   */
+  function awardKick(profile, points, opts) {
+    opts = opts || {};
+    const coins = opts.freeKick ? Math.floor(Math.max(0, points) / FREE_KICK_POINTS_PER_COIN) : coinsForKick(points);
+    const xp = opts.freeKick ? Math.floor(points / 2) : points;
+    const levelBefore = levelFromXp(profile.xp);
+    profile.xp += xp;
+    const levelAfter = levelFromXp(profile.xp);
+    const levelBonus = levelUpBonus(levelBefore, levelAfter);
+    profile.coins += coins + levelBonus;
+    return { coins, xp, levelBefore, levelAfter, levelBonus };
+  }
+
+  function utcDay(ts) {
+    return new Date(ts).toISOString().slice(0, 10);
+  }
+
+  /** First finished round of each (UTC) day pays a bonus that grows with your streak. */
+  function applyDaily(profile, now) {
+    const today = utcDay(now == null ? Date.now() : now);
+    const d = profile.daily || {};
+    if (d.last === today) return { bonus: 0, streak: d.streak || 1, already: true };
+    const yesterday = utcDay((now == null ? Date.now() : now) - 86400000);
+    const streak = d.last === yesterday ? (d.streak || 0) + 1 : 1;
+    const bonus = DAILY_BONUS_PER_DAY * Math.min(streak, DAILY_BONUS_MAX_DAYS);
+    profile.daily = { last: today, streak };
+    profile.coins += bonus;
+    return { bonus, streak, already: false };
+  }
+
   /** Coins for reaching `level` (paid once per level gained). */
   function levelUpCoins(level) {
     return 50 + 25 * level;
@@ -170,14 +221,6 @@
     }
     return null;
   }
-  function coinsForFreeKick(points) {
-    return Math.floor(points / FREE_KICK_POINTS_PER_COIN);
-  }
-
-  function upgradeCost(level) {
-    return UPGRADE_COSTS[level];
-  }
-
   /** Validate and apply a purchase to a profile object. Returns an error string or null. */
   function applyPurchase(profile, itemKey) {
     const level = levelFromXp(profile.xp);
@@ -188,7 +231,7 @@
       const cur = (profile.upgrades && profile.upgrades[id]) | 0;
       if (cur >= MAX_UPGRADE) return 'Already maxed out';
       if (level < UPGRADE_LEVEL_REQ[cur]) return `Reach level ${UPGRADE_LEVEL_REQ[cur]} first`;
-      const cost = UPGRADE_COSTS[cur];
+      const cost = upgradeCost(id, cur);
       if (profile.coins < cost) return 'Not enough coins';
       profile.coins -= cost;
       profile.upgrades = Object.assign({}, profile.upgrades, { [id]: cur + 1 });
@@ -227,15 +270,16 @@
       bestKick: 0,
       roundsPlayed: 0,
       milestones: [],
+      daily: {},
     };
   }
 
   return {
-    UPGRADES, UPGRADE_COSTS, UPGRADE_LEVEL_REQ, MAX_UPGRADE, OUTFITS, BALLS, TRAILS, SLOTS, MILESTONES,
+    UPGRADES, UPGRADE_LEVEL_REQ, MAX_UPGRADE, UPGRADE_BASE, UPGRADE_GROWTH, OUTFITS, BALLS, TRAILS, SLOTS, MILESTONES,
     DEFAULT_EQUIPPED, DEFAULT_OWNED, isOwned,
-    ROUND_COMPLETION_COINS, POINTS_PER_COIN, FREE_KICK_POINTS_PER_COIN,
-    levelFromXp, xpForLevel, coinsForRound, coinsForFreeKick, levelUpCoins, levelUpBonus,
-    checkMilestones, nextUnlocks, upgradeCost,
+    ROUND_COMPLETION_COINS, POINTS_PER_COIN, FREE_KICK_POINTS_PER_COIN, DAILY_BONUS_PER_DAY, DAILY_BONUS_MAX_DAYS,
+    levelFromXp, xpForLevel, coinsForKick, coinsForRound, levelUpCoins, levelUpBonus,
+    awardKick, applyDaily, checkMilestones, nextUnlocks, upgradeCost,
     applyPurchase, applyEquip, newProfile,
   };
 });

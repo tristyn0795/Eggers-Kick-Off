@@ -110,3 +110,20 @@ test('career: bosses unlock in order, wins raise skill, Pro unlocks the Mastery 
   p.career = pro.career;
   assert.ok(C.isOwned(p, 'ball', 'mastery'));
 });
+
+test('economy: steep upgrade curve, per-kick coins, daily streak', () => {
+  for (const u of C.UPGRADES) {
+    for (let l = 1; l < C.MAX_UPGRADE; l++) assert.ok(C.upgradeCost(u.id, l) > C.upgradeCost(u.id, l - 1));
+  }
+  assert.ok(C.upgradeCost('boots', 9) > 15000, 'top upgrade levels are a real grind');
+  const p = C.newProfile();
+  const a = C.awardKick(p, 800);
+  assert.strictEqual(a.coins, 100);
+  assert.strictEqual(p.xp, 800);
+  assert.strictEqual(p.coins, 100 + a.levelBonus);
+  const day = Date.UTC(2026, 9, 16, 12);
+  assert.strictEqual(C.applyDaily(p, day).bonus, 50);
+  assert.strictEqual(C.applyDaily(p, day).bonus, 0, 'once per day');
+  assert.strictEqual(C.applyDaily(p, day + 86400000).bonus, 100, 'streak day 2');
+  assert.strictEqual(C.applyDaily(p, day + 3 * 86400000).bonus, 50, 'streak resets after a missed day');
+});

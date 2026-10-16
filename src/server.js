@@ -37,6 +37,47 @@ function cleanName(raw) {
   return { name, nameKey: name.toLowerCase() };
 }
 
+// ---------------------------------------------------------------------------
+// Progress protection: signed backups the browser keeps, and password logins.
+// ---------------------------------------------------------------------------
+let BACKUP_SECRET = null;
+
+function signBackup(p) {
+  const data = {
+    v: 1, id: p.id, name: p.name, coins: p.coins, xp: p.xp, upgrades: p.upgrades, owned: p.owned,
+    equipped: p.equipped, bestRound: p.bestRound, bestKick: p.bestKick, roundsPlayed: p.roundsPlayed,
+    milestones: p.milestones || [], career: p.career || {}, daily: p.daily || {}, t: Date.now(),
+  };
+  const body = Buffer.from(JSON.stringify(data)).toString('base64url');
+  const sig = crypto.createHmac('sha256', BACKUP_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyBackup(str) {
+  const [body, sig] = String(str || '').split('.');
+  if (!body || !sig) return null;
+  const want = crypto.createHmac('sha256', BACKUP_SECRET).update(body).digest();
+  const got = Buffer.from(sig, 'base64url');
+  if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return null;
+  try { return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch (e) { return null; }
+}
+
+const scryptAsync = (pw, salt) => new Promise((resolve, reject) =>
+  crypto.scrypt(pw, salt, 32, (err, key) => (err ? reject(err) : resolve(key))));
+
+async function hashPassword(pw) {
+  const salt = crypto.randomBytes(16).toString('base64url');
+  return `scrypt$${salt}$${(await scryptAsync(pw, salt)).toString('base64url')}`;
+}
+
+async function checkPassword(pw, stored) {
+  const [, salt, hash] = String(stored || '').split('$');
+  if (!salt || !hash) return false;
+  const got = await scryptAsync(pw, salt);
+  const want = Buffer.from(hash, 'base64url');
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+
 function publicPlayer(p) {
   return {
     id: p.id,
@@ -52,6 +93,9 @@ function publicPlayer(p) {
     roundsPlayed: p.roundsPlayed,
     milestones: p.milestones || [],
     career: K.normalize(p.career),
+    daily: p.daily || {},
+    hasPassword: !!p.passwordHash,
+    backup: signBackup(p),
   };
 }
 
@@ -84,6 +128,9 @@ function rateLimit({ windowMs, max }) {
 // ---------------------------------------------------------------------------
 async function main() {
   const store = await createStore();
+  // The backup-signing key. Set PROFILE_SECRET so backups stay valid even if the database is replaced.
+  BACKUP_SECRET = process.env.PROFILE_SECRET || (await store.setSetting('profile_secret', crypto.randomBytes(32).toString('hex')));
+  if (!process.env.PROFILE_SECRET) console.warn('PROFILE_SECRET is not set; using a key stored in the database for progress backups.');
   const app = express();
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
@@ -132,6 +179,60 @@ async function main() {
     }
     return { token, player: publicPlayer(player) };
   }));
+
+  // Recreate a profile from a backup this device holds, if the server no longer has it.
+  app.post('/api/restore', rateLimit({ windowMs: 3600e3, max: 20 }), wrap(async (req) => {
+    const { token, backup } = req.body || {};
+    if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw new HttpError(400, 'Bad token');
+    const data = verifyBackup(backup);
+    if (!data || data.v !== 1 || typeof data.id !== 'string') throw new HttpError(400, 'That backup could not be verified');
+    if (await store.getPlayer(data.id)) throw new HttpError(409, 'That profile still exists — log in with your name and password');
+    let { name, nameKey } = cleanName(data.name);
+    for (let i = 2; (await store.getPlayerByNameKey(nameKey)) && i < 100; i++) {
+      name = `${data.name.slice(0, 13)} ${i}`;
+      nameKey = name.toLowerCase();
+    }
+    const base = C.newProfile();
+    const p = await store.createPlayer({
+      id: data.id, tokenHash: sha256(token), name, nameKey, coins: 0, xp: 0,
+      upgrades: base.upgrades, owned: base.owned, equipped: base.equipped,
+    });
+    Object.assign(p, {
+      coins: data.coins | 0, xp: data.xp | 0, upgrades: data.upgrades || {}, owned: data.owned || base.owned,
+      equipped: data.equipped || base.equipped, bestRound: data.bestRound | 0, bestKick: Number(data.bestKick) || 0,
+      roundsPlayed: data.roundsPlayed | 0, milestones: data.milestones || [], career: data.career || {}, daily: data.daily || {},
+    });
+    await store.savePlayer(p);
+    console.log(`Restored profile ${p.id} (${p.name}) from a device backup`);
+    return { restored: true, player: publicPlayer(p) };
+  }));
+
+  // Log in on any device with kicker name + password.
+  const loginFails = new Map();
+  setInterval(() => loginFails.clear(), 15 * 60e3).unref();
+  app.post('/api/login', rateLimit({ windowMs: 15 * 60e3, max: 20 }), wrap(async (req) => {
+    const { name, password } = req.body || {};
+    const nameKey = String(name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if ((loginFails.get(nameKey) || 0) >= 8) throw new HttpError(429, 'Too many attempts — try again in 15 minutes');
+    const p = nameKey && (await store.getPlayerByNameKey(nameKey));
+    if (p && !p.passwordHash) throw new HttpError(400, 'That kicker has no password yet. Set one in Profile on your original device.');
+    if (!p || !(await checkPassword(String(password || ''), p.passwordHash))) {
+      loginFails.set(nameKey, (loginFails.get(nameKey) || 0) + 1);
+      throw new HttpError(401, 'Wrong name or password');
+    }
+    const token = newId(24);
+    await store.addToken(p.id, sha256(token));
+    return { token, player: publicPlayer(p) };
+  }));
+
+  app.post('/api/me/password', auth, wrap(async (req) => withLock('p:' + req.player.id, async () => {
+    const pw = String((req.body && req.body.password) || '');
+    if (pw.length < 4 || pw.length > 64) throw new HttpError(400, 'Password must be 4–64 characters');
+    const p = await store.getPlayer(req.player.id);
+    p.passwordHash = await hashPassword(pw);
+    await store.savePlayer(p);
+    return { player: publicPlayer(p) };
+  })));
 
   app.get('/api/me', auth, wrap(async (req) => {
     const p = req.player;
@@ -233,18 +334,22 @@ async function main() {
           player.bestKickRoundId = round.id;
           player.bestKickIndex = index;
         }
+        // Coins and XP are paid on every kick so the wallet ticks up as you play.
+        const award = C.awardKick(player, points);
+        const entry = round.kicks[round.kicks.length - 1];
+        entry.c = award.coins;
+        entry.lb = award.levelBonus;
         const milestones = C.checkMilestones(player, { kick: result });
         if (done) {
           round.finished = true;
           round.finishedAt = Date.now();
-          const levelBefore = C.levelFromXp(player.xp);
-          const coins = C.coinsForRound(round.score);
-          player.coins += coins;
-          player.xp += round.score;
+          player.coins += C.ROUND_COMPLETION_COINS;
           player.roundsPlayed += 1;
+          const daily = C.applyDaily(player, round.finishedAt);
+          const kickCoins = round.kicks.reduce((n, k) => n + (k.c || 0), 0);
+          const levelBonus = round.kicks.reduce((n, k) => n + (k.lb || 0), 0);
           const levelAfter = C.levelFromXp(player.xp);
-          const levelBonus = C.levelUpBonus(levelBefore, levelAfter);
-          player.coins += levelBonus;
+          const levelBefore = C.levelFromXp(Math.max(0, player.xp - round.score));
           const newBestRound = round.score > player.bestRound;
           if (newBestRound) {
             player.bestRound = round.score;
@@ -267,11 +372,12 @@ async function main() {
           }
           const roundMilestones = C.checkMilestones(player, { roundScore: round.score });
           summary = {
-            score: round.score, coins, xp: round.score, newBestRound,
-            levelBefore, levelAfter, levelBonus, challenge, career,
+            score: round.score, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: round.score, newBestRound,
+            levelBefore, levelAfter, levelBonus, challenge, career, daily,
             coinBreakdown: {
-              points: Math.floor(round.score / C.POINTS_PER_COIN),
+              points: kickCoins,
               completion: C.ROUND_COMPLETION_COINS,
+              daily: daily.bonus,
               levelBonus,
               career: career ? career.reward : 0,
               milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
@@ -283,11 +389,11 @@ async function main() {
         }
         await store.saveRound(round);
         await store.savePlayer(player);
-        return { round, player, result, points, done, summary, newBestKick, milestones };
+        return { round, player, result, points, done, summary, newBestKick, milestones, award };
       });
     });
 
-    const { round, player, result, points, done, summary, newBestKick, milestones } = out;
+    const { round, player, result, points, done, summary, newBestKick, milestones, award } = out;
     // Hold the news back until the kick has finished playing on the kicker's screen,
     // so nobody (the kicker included) sees a result while the ball is still flying.
     const ticks = P.SWING_FRAMES + Math.min(25, result.flightFrames) + Math.min(45, Math.max(0, result.flightFrames - 25)) / 2
@@ -302,6 +408,7 @@ async function main() {
 
     return {
       index, points, total: round.score, done, summary, newBestKick, milestones,
+      earned: { coins: award.coins, levelBonus: award.levelBonus, levelAfter: award.levelAfter, levelBefore: award.levelBefore },
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,
         quality: result.quality, target: result.target, whiff: result.whiff,

@@ -1,6 +1,37 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.2.0',
+    date: '16 Oct 2026',
+    title: 'Your progress is safe + the economy rework 🪙',
+    sections: [
+      {
+        heading: '🔒 Progress protection',
+        items: [
+          'Sorry! The last update wiped online progress. That can never happen again: the server now refuses to run without its permanent database.',
+          'Every device now keeps a tamper-proof backup of your online and Career progress. If the server ever loses your profile, it is restored automatically.',
+          'New: set a password in Profile, then log in with your kicker name on any device.',
+        ],
+      },
+      {
+        heading: '🪙 Coins that flow',
+        items: [
+          'Coins and XP are now paid after every kick, not just at the end of the round. Watch the COINS counter tick up.',
+          'Level-ups happen mid-round and pay their bonus straight away.',
+          'New daily streak: your first round each day pays 50 coins × your streak (up to 350 coins on day 7+).',
+        ],
+      },
+      {
+        heading: '📈 The long grind',
+        items: [
+          'Upgrade prices now climb with every level: early levels are quick, but levels 6–10 are serious goals.',
+          'Cosmetics cost more, so top-tier gear is a real flex.',
+          'A round now pays 1 coin per 8 points (was 6), plus a 20-coin completion bonus.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.1.0',
     date: '16 Oct 2026',
     title: 'Career Mode & Henry joins the pond! 🪿',

@@ -309,6 +309,7 @@
         newBestKick: !!res.newBestKick,
         replay: this.mode === 'replay' ? this.cfg.title : null,
         extra: res.extra || null,
+        earned: res.earned || null,
         milestones: res.milestones || null,
         index: k.index,
         henry: k.henryHappy,

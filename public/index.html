@@ -26,6 +26,7 @@
       <div class="hud-pill hidden" id="pillBeat"><span class="lbl">TO BEAT</span><b id="hudBeat">0</b></div>
       <div class="hud-pill vs hidden" id="pillVs"><span class="lbl" id="hudVsName">VS</span><b id="hudVs">0</b></div>
       <div class="hud-pill hidden" id="pillReplay"><span class="lbl">REPLAY</span><b id="hudReplay"></b></div>
+      <div class="hud-pill coins" id="pillCoins"><span class="lbl">COINS</span><b id="hudCoins">+0</b></div>
       <div class="hud-pill"><span class="lbl">WIND</span><b id="hudWind">0</b></div>
       <button id="hudMute" class="ui hud-btn" title="Sound" aria-label="Toggle sound">🔊</button>
     </div>
@@ -87,8 +88,16 @@
         <button class="primary" type="submit">Let's kick!</button>
       </form>
       <p class="error" id="nameError"></p>
+      <details open>
+        <summary>Already have a kicker? Log in</summary>
+        <form id="loginForm">
+          <input id="loginName" maxlength="16" placeholder="Kicker name" autocomplete="username" />
+          <input id="loginPassword" type="password" maxlength="64" placeholder="Password" autocomplete="current-password" />
+          <button class="primary" type="submit">Log in</button>
+        </form>
+      </details>
       <details>
-        <summary>Already played on another device?</summary>
+        <summary>Have a transfer code instead?</summary>
         <form id="transferForm" class="inline">
           <input id="transferInput" placeholder="Paste your transfer code" autocomplete="off" />
           <button type="submit">Restore</button>

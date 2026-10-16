@@ -44,6 +44,12 @@
 
   function saveOffline() { local.set('ek_offline', S.offline); }
 
+  /** Store the latest server profile, and keep its signed backup on this device. */
+  function setPlayer(p) {
+    S.player = p;
+    if (p && p.backup) local.set('ek_backup', p.backup);
+  }
+
   // -------------------------------------------------------------------------
   // HUD
   // -------------------------------------------------------------------------
@@ -56,6 +62,9 @@
       $('#pillKick').classList.toggle('hidden', mode === 'replay');
       $('#pillScore').classList.toggle('hidden', mode === 'replay');
       $('#pillReplay').classList.toggle('hidden', mode !== 'replay');
+      $('#pillCoins').classList.toggle('hidden', mode === 'replay');
+      this.roundCoins = 0;
+      $('#hudCoins').textContent = '+0';
       $('#hudReplay').textContent = opts.replay || '';
       $('#pillBeat').classList.toggle('hidden', !opts.beat);
       $('#hudBeat').textContent = opts.beat ? fmt(opts.beat) : '';
@@ -124,6 +133,15 @@
       if (r.replay) sub.push(esc(r.replay));
       else if (r.firstBounce) sub.push(`First bounce ${fmtM(r.firstBounce)}`);
       if (r.extra) sub.push(esc(r.extra));
+      if (r.earned) {
+        const got = r.earned.coins + (r.earned.levelBonus || 0);
+        if (got > 0) sub.push(`<span class="coin-gain">+${fmt(r.earned.coins)} 🪙</span>`);
+        if (r.earned.levelAfter > r.earned.levelBefore) {
+          sub.push(`<span class="best">⬆️ LEVEL ${r.earned.levelAfter}! +${fmt(r.earned.levelBonus)} 🪙</span>`);
+          sfx.levelUp();
+        }
+        this.countCoins(got);
+      }
       if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
       $('#resSub').innerHTML = sub.join(' · ');
       const ms = r.milestones || [];
@@ -138,6 +156,26 @@
       this.last.flight = false;
     },
     hideResult() { $('#result').classList.add('hidden'); },
+    /** Tick the in-round coin counter up so earnings feel continuous. */
+    countCoins(amount) {
+      if (!amount) return;
+      const el = $('#hudCoins');
+      const from = this.roundCoins || 0;
+      const to = from + amount;
+      this.roundCoins = to;
+      const t0 = performance.now();
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / 700);
+        el.textContent = `+${fmt(from + (to - from) * k)}`;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+      const pill = $('#pillCoins');
+      pill.classList.remove('bump');
+      void pill.offsetWidth;
+      pill.classList.add('bump');
+      sfx.coin();
+    },
     hint(text) {
       const el = $('#hint');
       el.classList.toggle('hidden', !text);
@@ -214,14 +252,36 @@
   async function loadMe() {
     try {
       const me = await api('/api/me');
-      S.player = me.player;
+      setPlayer(me.player);
       S.ranks = me.ranks;
     } catch (e) {
-      if (e.status === 401) {
-        S.token = null;
-        S.player = null;
-        local.del('ek_token');
+      if (e.status === 401) await recoverProfile();
+    }
+  }
+
+  /**
+   * The server doesn't recognise this device's login. Never just throw progress away:
+   * try to rebuild the profile from the signed backup this device keeps.
+   */
+  async function recoverProfile() {
+    const backup = local.get('ek_backup', null);
+    if (backup && S.token) {
+      try {
+        const res = await api('/api/restore', { token: S.token, backup });
+        setPlayer(res.player);
+        toast(`Welcome back, ${res.player.name}! Your progress was restored from this device.`, 'good');
+        return;
+      } catch (err) {
+        if (err.status === 409) {
+          toast('Please log in with your kicker name and password.', 'error');
+        }
       }
+    }
+    S.player = null;
+    if (!backup) {
+      // Nothing to restore from: this login can never work again.
+      S.token = null;
+      local.del('ek_token');
     }
   }
 
@@ -455,7 +515,7 @@
         const p = chain.then(() => postKick(opts.roundId, index, frame));
         chain = p.catch(() => {});
         return p.then((res) => {
-          S.player = res.player;
+          setPlayer(res.player);
           cur.kicks.push({ d: res.result.distance, p: res.points, t: res.result.target });
           cur.milestones.push(...(res.milestones || []));
           return res;
@@ -501,38 +561,24 @@
       kicks,
       submit: (index, frame, sim, pts) => {
         total += pts;
-        cur.kicks.push({ d: sim.distance, p: pts, t: sim.target });
+        // Coins and XP land after every kick, just like online.
+        const earned = C.awardKick(prof, pts, { freeKick: endless });
+        cur.kicks.push({ d: sim.distance, p: pts, t: sim.target, c: earned.coins, lb: earned.levelBonus });
         const newBestKick = sim.distance > prof.bestKick;
         if (newBestKick) prof.bestKick = sim.distance;
         const milestones = C.checkMilestones(prof, { kick: sim });
         cur.milestones.push(...milestones);
-        let extra = null;
-        if (endless) {
-          const lvBefore = C.levelFromXp(prof.xp);
-          const coins = C.coinsForFreeKick(pts);
-          prof.coins += coins;
-          prof.xp += Math.floor(pts / 2);
-          extra = `+${coins} 🪙`;
-          const lvAfter = C.levelFromXp(prof.xp);
-          if (lvAfter > lvBefore) {
-            const bonus = C.levelUpBonus(lvBefore, lvAfter);
-            prof.coins += bonus;
-            extra += ` · ⬆️ Level ${lvAfter}! +${fmt(bonus)} 🪙`;
-            setTimeout(() => sfx.levelUp(), 400);
-          }
-        }
         saveOffline();
-        return { points: pts, total, newBestKick, extra, milestones, done: false };
+        return { points: pts, total, newBestKick, milestones, earned, done: false };
       },
       onEnd: () => {
-        const levelBefore = C.levelFromXp(prof.xp);
-        const coins = C.coinsForRound(total);
-        prof.coins += coins;
-        prof.xp += total;
+        prof.coins += C.ROUND_COMPLETION_COINS;
         prof.roundsPlayed += 1;
+        const daily = C.applyDaily(prof);
+        const kickCoins = cur.kicks.reduce((n, k) => n + (k.c || 0), 0);
+        const levelBonus = cur.kicks.reduce((n, k) => n + (k.lb || 0), 0);
         const levelAfter = C.levelFromXp(prof.xp);
-        const levelBonus = C.levelUpBonus(levelBefore, levelAfter);
-        prof.coins += levelBonus;
+        const levelBefore = C.levelFromXp(Math.max(0, prof.xp - total));
         const newBestRound = total > prof.bestRound;
         if (newBestRound) prof.bestRound = total;
         let career = null;
@@ -545,10 +591,10 @@
         const roundMilestones = C.checkMilestones(prof, { roundScore: total });
         saveOffline();
         showEnd({
-          kind: cur.kind, offline: true, kicks: cur.kicks, score: total, coins, xp: total, newBestRound,
-          levelBefore, levelAfter, levelBonus, career, milestones: roundMilestones, kickMilestones: cur.milestones,
+          kind: cur.kind, offline: true, kicks: cur.kicks, score: total, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: total,
+          newBestRound, levelBefore, levelAfter, levelBonus, career, daily, milestones: roundMilestones, kickMilestones: cur.milestones,
           coinBreakdown: {
-            points: Math.floor(total / C.POINTS_PER_COIN), completion: C.ROUND_COMPLETION_COINS, levelBonus,
+            points: kickCoins, completion: C.ROUND_COMPLETION_COINS, daily: daily.bonus, levelBonus,
             career: career ? career.reward : 0, milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
           },
           nextUnlock: C.nextUnlocks(levelAfter),
@@ -575,8 +621,9 @@
     if (!b) return '';
     const kickMs = (s.kickMilestones || []).reduce((n, m) => n + m.reward, 0);
     const rows = [
-      [`Points (${fmt(s.score)} ÷ ${C.POINTS_PER_COIN})`, b.points],
+      [`Kick coins (1 per ${C.POINTS_PER_COIN} pts, paid each kick)`, b.points],
       ['Round completion bonus', b.completion],
+      [`Daily bonus${s.daily && s.daily.streak > 1 ? ` (🔥 ${s.daily.streak}-day streak)` : ''}`, b.daily || 0],
       [`Level-up bonus`, b.levelBonus],
       ['Career first-win bounty', b.career],
       ['Milestones', b.milestones + kickMs],
@@ -616,6 +663,10 @@
     const ms = (s.kickMilestones || []).concat(s.milestones || []);
     if (ms.length) banners += `<div class="banner milestone">🏅 ${ms.map((m) => `${esc(m.name)} <small>+${fmt(m.reward)}</small>`).join(' · ')}</div>`;
     const rank = online && s.ranks && s.ranks.round ? `<div class="reward rank"><b>#${s.ranks.round}</b>All-time rank</div>` : '';
+    if (online && S.player && !S.player.hasPassword) {
+      banners += '<div class="banner blue">🔒 Protect your progress: <a href="#" data-end="profile">set a password</a> so you can log in on any device.</div>';
+    }
+    if (s.daily && s.daily.bonus) banners += `<div class="banner">🔥 Daily bonus +${fmt(s.daily.bonus)} 🪙 — ${s.daily.streak}-day streak! Come back tomorrow for more.</div>`;
     const nu = s.nextUnlock;
     const next = nu ? `<div class="next-unlock">🔓 <b>Next unlock at level ${nu.level}:</b> ${nu.items.map(esc).join(', ')}</div>` : '';
     $('#endBody').innerHTML = `
@@ -650,6 +701,7 @@
         else if (s.kind === 'challenge' && s.challenge) startRanked(s.challenge.id ? s.challenge : null);
         else startRanked();
       } else if (a === 'career') openCareer();
+      else if (a === 'profile') { e.preventDefault(); renderProfile(); show('profile'); }
       else if (a === 'challenge') shareChallenge(s.roundId, s.score);
       else if (a === 'shop') openShop(s.offline ? 'offline' : 'online');
       else if (a === 'leaderboard') openLeaderboard();
@@ -725,8 +777,9 @@
   // -------------------------------------------------------------------------
   function coinGuideHtml() {
     return `<ul class="howto coin-guide">
-      <li><b>Finish a round:</b> ${C.ROUND_COMPLETION_COINS} coins + 1 coin for every ${C.POINTS_PER_COIN} points you score.</li>
-      <li><b>Free Kick:</b> 1 coin for every ${C.FREE_KICK_POINTS_PER_COIN} points, paid after every kick.</li>
+      <li><b>Every kick:</b> 1 coin for every ${C.POINTS_PER_COIN} points, paid as soon as the ball stops (Free Kick: 1 per ${C.FREE_KICK_POINTS_PER_COIN}).</li>
+      <li><b>Finish a round:</b> +${C.ROUND_COMPLETION_COINS} completion bonus.</li>
+      <li><b>Daily streak:</b> your first round each day pays ${C.DAILY_BONUS_PER_DAY} × your streak (up to ${fmt(C.DAILY_BONUS_PER_DAY * C.DAILY_BONUS_MAX_DAYS)} on day ${C.DAILY_BONUS_MAX_DAYS}+).</li>
       <li><b>Level up:</b> bonus coins every level (${fmt(C.levelUpCoins(2))} at level 2, rising by 25 each level).</li>
       <li><b>Milestones:</b> one-time rewards from ${fmt(Math.min(...C.MILESTONES.map((m) => m.reward)))} to ${fmt(Math.max(...C.MILESTONES.map((m) => m.reward)))} coins (see Locker → Milestones).</li>
       <li><b>Career:</b> the first win against each boss pays a bounty (up to ${fmt(Math.max(...EKCareer.BOSSES.map((b) => b.reward)))} coins).</li>
@@ -866,7 +919,10 @@
         let btn;
         if (lv >= C.MAX_UPGRADE) btn = '<button disabled>MAXED</button>';
         else if (level < C.UPGRADE_LEVEL_REQ[lv]) btn = `<button disabled>🔒 Level ${C.UPGRADE_LEVEL_REQ[lv]}</button>`;
-        else btn = `<button data-buy="upgrade:${u.id}" ${prof.coins < C.UPGRADE_COSTS[lv] ? 'disabled' : ''}>Upgrade · 🪙 ${fmt(C.UPGRADE_COSTS[lv])}</button>`;
+        else {
+          const cost = C.upgradeCost(u.id, lv);
+          btn = `<button data-buy="upgrade:${u.id}" ${prof.coins < cost ? 'disabled' : ''}>Upgrade · 🪙 ${fmt(cost)}</button>`;
+        }
         return `<div class="item"><div class="top"><span class="icon">${u.icon}</span><div><div class="name">${esc(u.name)}</div><div class="desc">${esc(u.desc)}</div></div></div>
           <div class="pips">${pips}</div><div class="muted small">Level ${lv} / ${C.MAX_UPGRADE}</div>${btn}</div>`;
       }).join('');
@@ -911,7 +967,7 @@
         const res = kind === 'buy'
           ? await api('/api/shop/buy', { item: key })
           : await api('/api/shop/equip', { slot: key.split(':')[0], id: key.split(':')[1] });
-        S.player = res.player;
+        setPlayer(res.player);
       } else {
         const err = kind === 'buy' ? C.applyPurchase(S.offline, key) : C.applyEquip(S.offline, key.split(':')[0], key.split(':')[1]);
         if (err) throw new Error(err);
@@ -1136,6 +1192,12 @@
           <div class="stat"><span>Kick rank</span><b>${r.kick ? `#${r.kick}` : '—'}</b></div>
         </div>
         <form id="renameForm" class="inline"><input id="renameInput" maxlength="16" value="${esc(p.name)}" /><button type="submit">Rename</button></form>
+        <div class="banner ${p.hasPassword ? 'green' : ''}">${p.hasPassword
+          ? '🔒 Password set — log in with your kicker name on any device.'
+          : '⚠️ Set a password so you can log in on any device and never lose your progress.'}</div>
+        <form id="passwordForm" class="inline"><input id="passwordInput" type="password" maxlength="64" minlength="4"
+          placeholder="${p.hasPassword ? 'New password' : 'Choose a password (4+ characters)'}" autocomplete="new-password" />
+          <button type="submit">${p.hasPassword ? 'Change' : 'Set password'}</button></form>
         <details><summary>Transfer code (play on another device)</summary>
           <p class="muted">Keep this secret — anyone with it can use your profile. Paste it into "Already played on another device?" on the other device.</p>
           <code class="token">${esc(S.token)}</code>
@@ -1154,13 +1216,25 @@
       <div class="actions"><button class="btn" data-prof="reset">Reset offline progress</button>
       <button class="btn" data-prof="mute">${sfx.muted ? '🔇 Sound off' : '🔊 Sound on'}</button></div>`;
     body.innerHTML = html;
+    const pf = $('#passwordForm');
+    if (pf) {
+      pf.onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const res = await api('/api/me/password', { password: $('#passwordInput').value });
+          setPlayer(res.player);
+          toast('Password saved — you can now log in anywhere', 'good');
+          renderProfile();
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    }
     const rf = $('#renameForm');
     if (rf) {
       rf.onsubmit = async (e) => {
         e.preventDefault();
         try {
           const res = await api('/api/me/name', { name: $('#renameInput').value });
-          S.player = res.player;
+          setPlayer(res.player);
           toast('Name updated', 'good');
           renderProfile();
           renderMenu();
@@ -1227,7 +1301,7 @@
       else if (act === 'signout') {
         modal('<h2>Sign out?</h2><p class="muted">Make sure you\'ve saved your transfer code, or you won\'t be able to get this profile back.</p><div class="actions"><button class="btn danger" data-modal="yes">Sign out</button><button class="btn" data-modal="no">Cancel</button></div>', (x) => {
           if (x === 'yes') {
-            S.token = null; S.player = null; S.ranks = null; local.del('ek_token');
+            S.token = null; S.player = null; S.ranks = null; local.del('ek_token'); local.del('ek_backup');
             if (S.ws) S.ws.close();
             goMenu();
           } else { renderProfile(); show('profile'); }
@@ -1260,9 +1334,28 @@
       const res = await api('/api/player', { name: $('#nameInput').value });
       S.token = res.token;
       local.set('ek_token', S.token);
-      S.player = res.player;
+      setPlayer(res.player);
       wsSend({ t: 'hello', token: S.token });
       toast(`Welcome, ${S.player.name}!`, 'good');
+      renderMenu();
+      const fn = S.pendingAfterName;
+      S.pendingAfterName = null;
+      if (fn) fn(); else goMenu();
+    } catch (err) {
+      $('#nameError').textContent = err.message;
+    }
+  });
+
+  $('#loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('#nameError').textContent = '';
+    try {
+      const res = await api('/api/login', { name: $('#loginName').value, password: $('#loginPassword').value });
+      S.token = res.token;
+      local.set('ek_token', S.token);
+      setPlayer(res.player);
+      wsSend({ t: 'hello', token: S.token });
+      toast(`Welcome back, ${S.player.name}!`, 'good');
       renderMenu();
       const fn = S.pendingAfterName;
       S.pendingAfterName = null;
@@ -1280,7 +1373,7 @@
     S.token = code;
     try {
       const me = await api('/api/me');
-      S.player = me.player;
+      setPlayer(me.player);
       S.ranks = me.ranks;
       local.set('ek_token', code);
       wsSend({ t: 'hello', token: code });
