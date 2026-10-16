@@ -1,6 +1,36 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.6.0',
+    date: '16 Oct 2026',
+    title: 'Getting ready for the app stores 📲',
+    sections: [
+      {
+        heading: '📲 Install the game',
+        items: [
+          'New "Install app" button on the menu (Android & computers). On iPhone: Share → Add to Home Screen.',
+          'New app icon, and the game opens full-screen from your home screen.',
+          'Eggers Kick Off is getting ready for Google Play and the App Store. Your progress will carry over.',
+        ],
+      },
+      {
+        heading: '🛡️ Keeping it friendly',
+        items: [
+          'Tap ⋯ next to any player on the leaderboard, in a room or in chat to Block or Report them.',
+          'Blocked players disappear from your chat and live feed. Unblock them any time in Profile.',
+          'A smarter word filter for names and chat (it catches sneaky spellings, and leaves normal words alone).',
+        ],
+      },
+      {
+        heading: '🔒 Your data',
+        items: [
+          'New Privacy Policy and Terms, linked from Profile and How to play.',
+          'You can now permanently delete your online account in Profile → Delete account.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.5.1',
     date: '16 Oct 2026',
     title: 'Phone layout & multiplayer feed fixes 📱',

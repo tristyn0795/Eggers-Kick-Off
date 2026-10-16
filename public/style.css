@@ -573,3 +573,21 @@ body { -webkit-text-size-adjust: 100%; }
   body.room-active #distance { top: 122px; }
   #toasts { bottom: calc(64px + env(safe-area-inset-bottom)); }
 }
+
+/* ---- v1.6: report/block, account deletion, legal links ---- */
+.mini-btn, .card button.mini-btn, #lbTable button.mini-btn {
+  background: none !important; box-shadow: none !important; border: 0; padding: 0 6px; margin-left: 4px;
+  color: var(--muted); font-weight: 900; font-size: 16px; line-height: 1; cursor: pointer; min-height: 0; vertical-align: middle;
+}
+.mini-btn:hover, .mini-btn:focus-visible { color: var(--blue); }
+.room-members li > span:last-child { display: inline-flex; align-items: center; gap: 2px; }
+.lb .act, td.act { white-space: nowrap; }
+.quote { margin: 8px 0; padding: 8px 10px; border-left: 4px solid #d0dbe4; background: #f6f9fb; border-radius: 6px; font-style: italic; overflow-wrap: anywhere; }
+.actions.column { flex-direction: column; }
+.actions.column > button { flex: 0 0 auto; }
+.card button.btn.small { padding: 5px 12px; font-size: 13px; flex: none; }
+.legal-links { margin-top: 18px; font-size: 13px; text-align: center; color: #6b7c8a; }
+.legal-links a { color: var(--blue); }
+#deleteConfirm { width: 100%; }
+.menu-buttons .row.links { flex-wrap: wrap; row-gap: 0; }
+@media (max-width: 560px) { .menu-buttons .row.links button.link { font-size: 14px; padding: 4px 3px; } }

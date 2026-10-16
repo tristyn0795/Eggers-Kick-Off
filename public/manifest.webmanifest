@@ -1,10 +1,23 @@
 {
+  "id": "/",
   "name": "Eggers Kick Off",
   "short_name": "Kick Off",
-  "start_url": "/",
+  "description": "Help Jason boot the ball to the Click Wise Design office and beyond. Time your kick, hit the targets, climb the leaderboard.",
+  "start_url": "/?source=app",
+  "scope": "/",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
   "background_color": "#4fb3f6",
   "theme_color": "#047dc3",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["games", "sports", "entertainment"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
 }

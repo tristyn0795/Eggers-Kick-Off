@@ -14,6 +14,10 @@
   const fmt = (n) => Math.round(n || 0).toLocaleString();
   const fmtM = (n) => `${Math.floor(n || 0).toLocaleString()} m`;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // In the browser the game talks to the server it was loaded from. Inside the iOS/Android
+  // app shell the files are bundled, so app-config.js points EK_API_BASE at the live server.
+  const API_BASE = String(window.EK_API_BASE || '').replace(/\/$/, '');
+  const IS_APP = !!window.EK_API_BASE;
 
   const local = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -34,6 +38,7 @@
     onlineCount: 0,
     room: null,
     roomChat: [],
+    blocked: local.get('ek_blocked', {}), // playerId -> name; their chat and feed posts are hidden
     roomFinal: null,
     wantRoom: null,
     current: null,
@@ -49,6 +54,49 @@
   function stars(n) {
     n = n | 0;
     return n > 0 ? ` <span class="prestige-badge" title="Prestige ${n}">⭐${n}</span>` : '';
+  }
+
+  /** Drop the online login and its backup from this device (sign out / account deleted). */
+  function forgetOnlineProfile() {
+    S.token = null; S.player = null; S.ranks = null;
+    local.del('ek_token'); local.del('ek_backup');
+    if (S.ws) S.ws.close();
+  }
+
+  const isBlocked = (id) => !!(id && S.blocked[id]);
+
+  /** Report / block menu for another player (names, chat, leaderboard). */
+  function playerMenu(id, name, context) {
+    if (!id || (S.player && id === S.player.id)) return;
+    const blocked = isBlocked(id);
+    modal(`<h2>${esc(name)}</h2>
+      <p class="muted">Blocking hides their chat and live-feed posts on this device. Reporting sends their name${context ? ' and the message' : ''} to the Click Wise team for review.</p>
+      ${context ? `<blockquote class="quote">${esc(context)}</blockquote>` : ''}
+      <div class="actions">
+        <button class="btn ${blocked ? '' : 'danger'}" data-modal="${blocked ? 'unblock' : 'block'}">${blocked ? '✅ Unblock' : '🚫 Block'}</button>
+        <button class="btn danger" data-modal="report">🚩 Report</button>
+        <button class="btn" data-modal="close">Cancel</button>
+      </div>`, (a) => {
+      if (a === 'block') { S.blocked[id] = name; local.set('ek_blocked', S.blocked); toast(`${name} is blocked`, 'good'); renderChat(); goBackFromModal(); }
+      else if (a === 'unblock') { delete S.blocked[id]; local.set('ek_blocked', S.blocked); toast(`${name} is unblocked`, 'good'); renderChat(); goBackFromModal(); }
+      else if (a === 'report') reportPlayer(id, name, context);
+      else goBackFromModal();
+    });
+  }
+
+  function reportPlayer(id, name, context) {
+    const reasons = [['name', 'Offensive name'], ['chat', 'Abusive chat'], ['cheating', 'Cheating'], ['other', 'Something else']];
+    modal(`<h2>🚩 Report ${esc(name)}</h2><p class="muted">Why are you reporting them?</p>
+      <div class="actions column">${reasons.map(([k, l]) => `<button class="btn" data-modal="r:${k}">${l}</button>`).join('')}
+      <button class="btn" data-modal="close">Cancel</button></div>`, async (a) => {
+      if (!a.startsWith('r:')) { goBackFromModal(); return; }
+      if (!S.player) { toast('Sign in to report players', 'error'); goBackFromModal(); return; }
+      try {
+        await api('/api/report', { playerId: id, reason: a.slice(2), context: context || '' });
+        toast('Thanks — the report was sent. You can also block them.', 'good');
+      } catch (err) { toast(err.message, 'error'); }
+      goBackFromModal();
+    });
   }
 
   /** Store the latest server profile, and keep its signed backup on this device. */
@@ -260,7 +308,7 @@
   async function api(path, body, method) {
     const headers = { 'Content-Type': 'application/json' };
     if (S.token) headers.Authorization = `Bearer ${S.token}`;
-    const res = await fetch(path, {
+    const res = await fetch(API_BASE + path, {
       method: method || (body ? 'POST' : 'GET'),
       headers,
       body: body ? JSON.stringify(body) : undefined,
@@ -279,9 +327,17 @@
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 5000);
-      const res = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
+      const res = await fetch(API_BASE + '/api/health', { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(t);
       S.online = res.ok;
+      const health = res.ok ? await res.json() : {};
+      const ss = { get(k) { try { return sessionStorage.getItem(k); } catch (e) { return '1'; } }, set(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { /* unavailable */ } } };
+      if (health.rules && health.rules !== P.RULES_VERSION) {
+        // The game was updated while this copy was open (or this app build is out of date).
+        if (!IS_APP && !ss.get('ek_reloaded')) { ss.set('ek_reloaded', '1'); location.reload(); return false; }
+        S.online = false;
+        S.needsUpdate = true;
+      } else if (res.ok) ss.set('ek_reloaded', null);
     } catch (e) {
       S.online = false;
     }
@@ -317,6 +373,7 @@
         if (err.status === 409) {
           toast('Please log in with your kicker name and password.', 'error');
         }
+        if (err.status === 410) { forgetOnlineProfile(); return; } // the player deleted this account
       }
     }
     S.player = null;
@@ -329,9 +386,10 @@
 
   function connectWs() {
     if (!S.online) return;
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const base = API_BASE ? new URL(API_BASE) : location;
+    const proto = base.protocol === 'https:' ? 'wss' : 'ws';
     let ws;
-    try { ws = new WebSocket(`${proto}://${location.host}/ws`); } catch (e) { return; }
+    try { ws = new WebSocket(`${proto}://${base.host}/ws`); } catch (e) { return; }
     S.ws = ws;
     ws.onopen = () => {
       S.wsOk = true;
@@ -372,6 +430,7 @@
       case 'feed': {
         if (S.player && msg.playerId === S.player.id && game.playing) break; // you already saw it land
         if (S.room && S.room.members.some((m) => m.id === msg.playerId)) break; // shown as a room update instead
+        if (isBlocked(msg.playerId)) break;
         const t = msg.target;
         const where = t ? ` — ${t.ring === 'BULLSEYE' ? '🎯 BULLSEYE' : t.ring.toLowerCase()} at ${esc(t.name)}` : '';
         addFeed(`🔥 <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${where}`);
@@ -388,7 +447,7 @@
         beginOnlineRound({ kind: 'room', roundId: msg.roundId, baseSeed: msg.baseSeed, upgrades: msg.upgrades });
         break;
       case 'room:kick':
-        if (S.player && msg.id !== S.player.id) {
+        if (S.player && msg.id !== S.player.id && !isBlocked(msg.id)) {
           addFeed(`👟 <b>${esc(msg.name)}</b>: ${fmtM(msg.distance)} <span style="opacity:.7">(+${fmt(msg.points)})</span>`);
         }
         break;
@@ -397,6 +456,7 @@
         if (!game.playing) renderRoom();
         break;
       case 'room:chat':
+        if (isBlocked(msg.id)) break;
         S.roomChat.push(msg);
         if (S.roomChat.length > 40) S.roomChat.shift();
         renderChat();
@@ -446,7 +506,9 @@
   function renderStatus() {
     const el = $('#onlineStatus');
     if (!el) return;
-    if (!S.online) {
+    if (S.needsUpdate) {
+      el.innerHTML = `<span class="dot off"></span>${IS_APP ? 'A new version is out! Update the app to play online.' : 'A new version is out! Refresh the page to play online.'} Casual &amp; Free Kick still work.`;
+    } else if (!S.online) {
       el.innerHTML = '<span class="dot off"></span>Offline — online modes unavailable. Casual & Free Kick still work.';
     } else {
       el.innerHTML = `<span class="dot${S.wsOk ? '' : ' off'}"></span>${S.wsOk ? `${S.onlineCount} kicker${S.onlineCount === 1 ? '' : 's'} online` : 'Connecting…'}`;
@@ -839,7 +901,7 @@
       if (onAction) onAction(a);
       else if (a === 'close') goBackFromModal();
     };
-    S.modalReturn = S.screen;
+    if (S.screen !== 'modal') S.modalReturn = S.screen; // a modal opened from a modal returns to the screen underneath
     show('modal');
   }
   function goBackFromModal() {
@@ -1221,7 +1283,8 @@
         if (r.roundId && type === 'kick' && r.kickIndex != null) act = `<button data-replay="${esc(r.roundId)}" data-idx="${r.kickIndex}" title="Watch replay">▶ Watch</button>`;
         else if (r.roundId && type !== 'kick' && !me) act = `<button data-challenge="${esc(r.roundId)}" title="Play the same 10 kicks">⚔️ Beat it</button>`;
         const medal = ['🥇', '🥈', '🥉'][i] || i + 1;
-        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}${stars(r.prestige)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}</td></tr>`;
+        const more = me ? '' : `<button class="mini-btn" data-player="${esc(r.playerId)}" data-pname="${esc(r.name)}" title="Report or block" aria-label="Report or block ${esc(r.name)}">⋯</button>`;
+        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}${stars(r.prestige)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}${more}</td></tr>`;
       }).join('');
     } catch (e) {
       table.innerHTML = `<tr><td class="error">${esc(e.message)}</td></tr>`;
@@ -1299,7 +1362,8 @@
       const right = room.status === 'lobby' ? (m.connected ? 'ready' : 'away')
         : `${fmt(m.total)} pts · ${m.done ? 'done' : `kick ${Math.min(m.kicks + 1, 10)}/10`}`;
       const medal = room.status !== 'lobby' ? `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ` : '';
-      return `<li class="${m.connected ? '' : 'off'}"><span>${medal}${esc(m.name)}${tag}</span><span class="muted">${right}</span></li>`;
+      const more = m.id !== me ? `<button class="mini-btn" data-player="${esc(m.id)}" data-pname="${esc(m.name)}" title="Report or block" aria-label="Report or block ${esc(m.name)}">⋯</button>` : '';
+      return `<li class="${m.connected ? '' : 'off'}"><span>${medal}${esc(m.name)}${tag}</span><span class="muted">${right}${more}</span></li>`;
     }).join('');
     let status = '';
     let actions = '';
@@ -1338,7 +1402,9 @@
   function renderChat() {
     const el = $('#roomChat');
     if (!el) return;
-    el.innerHTML = S.roomChat.map((m) => `<div><b>${esc(m.name)}:</b> ${esc(m.text)}</div>`).join('') || '<div class="muted">No messages yet.</div>';
+    const me = S.player && S.player.id;
+    el.innerHTML = S.roomChat.filter((m) => !isBlocked(m.id)).map((m, i) => `<div><b>${esc(m.name)}:</b> ${esc(m.text)}${m.id && m.id !== me
+      ? ` <button class="mini-btn" data-player="${esc(m.id)}" data-pname="${esc(m.name)}" data-chat="${esc(m.text)}" title="Report or block" aria-label="Report or block ${esc(m.name)}">⋯</button>` : ''}</div>`).join('') || '<div class="muted">No messages yet.</div>';
     el.scrollTop = el.scrollHeight;
   }
 
@@ -1377,6 +1443,62 @@
   // -------------------------------------------------------------------------
   // Profile
   // -------------------------------------------------------------------------
+  function legalLinksHtml() {
+    const base = API_BASE || '';
+    return `<p class="legal-links"><a href="${base}/privacy.html" target="_blank" rel="noopener">Privacy policy</a> ·
+      <a href="${base}/terms.html" target="_blank" rel="noopener">Terms</a> ·
+      <a href="${base}/privacy.html#delete" target="_blank" rel="noopener">Data &amp; deletion</a></p>`;
+  }
+
+  function confirmDeleteAccount() {
+    const p = S.player;
+    if (!p) return;
+    modal(`<h2>🗑️ Delete ${esc(p.name)}?</h2>
+      <p>This permanently deletes your online profile and everything in it. It cannot be undone.</p>
+      <p class="muted">Type your kicker name to confirm:</p>
+      <input id="deleteConfirm" autocomplete="off" maxlength="16" placeholder="${esc(p.name)}" />
+      <p class="error" id="deleteError"></p>
+      <div class="actions"><button class="btn danger" data-modal="yes">Delete forever</button><button class="btn" data-modal="no">Keep my account</button></div>`, async (a) => {
+      if (a !== 'yes') { renderProfile(); show('profile'); return; }
+      if ($('#deleteConfirm').value.trim().toLowerCase() !== p.name.toLowerCase()) {
+        $('#deleteError').textContent = "That doesn't match your kicker name";
+        return;
+      }
+      try {
+        await api('/api/me', null, 'DELETE');
+        forgetOnlineProfile();
+        toast('Your account was deleted', 'good');
+        renderMenu();
+        goMenu();
+      } catch (err) { $('#deleteError').textContent = err.message; }
+    });
+  }
+
+  // "Install app": Android/desktop Chrome hand us an install prompt; iPhone needs Share → Add to Home Screen.
+  let installPrompt = null;
+  const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+  const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; renderInstallButton(); });
+  window.addEventListener('appinstalled', () => { installPrompt = null; renderInstallButton(); toast('Installed! Find Eggers Kick Off on your home screen.', 'good'); });
+  function renderInstallButton() {
+    const b = $('#installBtn');
+    if (b) b.classList.toggle('hidden', IS_APP || isStandalone() || !(installPrompt || isIos()));
+  }
+  async function installApp() {
+    if (installPrompt) {
+      installPrompt.prompt();
+      try { await installPrompt.userChoice; } catch (e) { /* dismissed */ }
+      installPrompt = null;
+      renderInstallButton();
+      return;
+    }
+    modal(`<h2>📲 Add to your Home Screen</h2>
+      <ol class="howto"><li>Tap the <b>Share</b> button <span aria-hidden="true">⬆️</span> in Safari.</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b>.</li><li>Tap <b>Add</b>. Eggers Kick Off opens full-screen like an app.</li></ol>
+      <div class="actions"><button class="btn primary" data-modal="close">Got it</button></div>`);
+  }
+
   function renderProfile() {
     const body = $('#profileBody');
     const o = S.offline;
@@ -1408,6 +1530,10 @@
           <p class="muted">Keep this secret — anyone with it can use your profile. Paste it into "Already played on another device?" on the other device.</p>
           <code class="token">${esc(S.token)}</code>
           <div class="actions"><button class="btn" data-prof="copy">Copy code</button><button class="btn danger" data-prof="signout">Sign out on this device</button></div>
+        </details>
+        <details><summary>Delete account</summary>
+          <p class="muted">Permanently deletes <b>${esc(p.name)}</b>: coins, upgrades, gear, Career, records and leaderboard spots. This can't be undone, and your device backup is erased too. Your offline profile on this device is kept.</p>
+          <div class="actions"><button class="btn danger" data-prof="delete">🗑️ Delete my account</button></div>
         </details>`;
     } else if (S.online) {
       html += '<p class="muted">Create a kicker name to save progress online and get on the leaderboard.</p><div class="actions"><button class="btn primary" data-prof="create">Create kicker name</button></div>';
@@ -1421,6 +1547,12 @@
       </div>
       <div class="actions"><button class="btn" data-prof="reset">Reset offline progress</button>
       <button class="btn" data-prof="mute">${sfx.muted ? '🔇 Sound off' : '🔊 Sound on'}</button></div>`;
+    const blockedIds = Object.keys(S.blocked);
+    if (blockedIds.length) {
+      html += `<h3>🚫 Blocked players</h3><ul class="room-members">${blockedIds.map((id) => `<li><span>${esc(S.blocked[id])}</span>
+        <button class="btn small" data-unblock="${esc(id)}">Unblock</button></li>`).join('')}</ul>`;
+    }
+    html += legalLinksHtml();
     body.innerHTML = html;
     const pf = $('#passwordForm');
     if (pf) {
@@ -1513,8 +1645,7 @@
       else if (act === 'signout') {
         modal('<h2>Sign out?</h2><p class="muted">Make sure you\'ve saved your transfer code, or you won\'t be able to get this profile back.</p><div class="actions"><button class="btn danger" data-modal="yes">Sign out</button><button class="btn" data-modal="no">Cancel</button></div>', (x) => {
           if (x === 'yes') {
-            S.token = null; S.player = null; S.ranks = null; local.del('ek_token'); local.del('ek_backup');
-            if (S.ws) S.ws.close();
+            forgetOnlineProfile();
             goMenu();
           } else { renderProfile(); show('profile'); }
         });
@@ -1525,7 +1656,14 @@
           renderProfile(); show('profile');
         });
       } else if (act === 'mute') { sfx.toggle(); renderProfile(); }
+      else if (act === 'delete') confirmDeleteAccount();
+      return;
     }
+    const ub = e.target.closest('[data-unblock]');
+    if (ub) { delete S.blocked[ub.dataset.unblock]; local.set('ek_blocked', S.blocked); renderProfile(); return; }
+    const pm = e.target.closest('[data-player]');
+    if (pm) { e.stopPropagation(); playerMenu(pm.dataset.player, pm.dataset.pname, pm.dataset.chat || ''); return; }
+    if (e.target.closest('[data-install]')) { installApp(); return; }
   });
 
   // "Show password" checkboxes flip their fields between hidden and visible text.
@@ -1620,6 +1758,7 @@
     await checkOnline();
     game.attract(activeProfile().equipped);
     renderPatchBadge();
+    renderInstallButton();
     const latest = latestPatch();
     const returning = !!S.token || S.offline.roundsPlayed > 0 || S.offline.bestKick > 0;
     const unseen = latest && local.get(PATCH_SEEN_KEY, null) !== latest.version;
@@ -1633,7 +1772,7 @@
       });
     }
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      if (!IS_APP) navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   }
 

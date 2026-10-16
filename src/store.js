@@ -73,6 +73,18 @@ class PgStore {
       ALTER TABLE players ADD COLUMN IF NOT EXISTS daily JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS prestige INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS challenges JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT false;
+      CREATE TABLE IF NOT EXISTS reports (
+        id TEXT PRIMARY KEY,
+        reporter_id TEXT,
+        reported_id TEXT NOT NULL,
+        reported_name TEXT,
+        reason TEXT NOT NULL,
+        context TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS reports_status ON reports (status, created_at);
       CREATE TABLE IF NOT EXISTS player_tokens (
         token_hash TEXT PRIMARY KEY,
         player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -106,6 +118,7 @@ class PgStore {
       daily: r.daily || {},
       prestige: r.prestige || 0,
       challenges: r.challenges || {},
+      banned: !!r.banned,
     };
   }
 
@@ -180,12 +193,12 @@ class PgStore {
       await this.pool.query(
         `UPDATE players SET name=$2, name_key=$3, coins=$4, xp=$5, upgrades=$6, owned=$7, equipped=$8,
            best_round=$9, best_round_id=$10, best_kick=$11, best_kick_round_id=$12, best_kick_index=$13,
-           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18, prestige=$19, challenges=$20
+           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18, prestige=$19, challenges=$20, banned=$21
          WHERE id=$1`,
         [p.id, p.name, p.nameKey, p.coins, p.xp, JSON.stringify(p.upgrades), JSON.stringify(p.owned),
           JSON.stringify(p.equipped), p.bestRound, p.bestRoundId, p.bestKick, p.bestKickRoundId,
           p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {}),
-          p.passwordHash || null, JSON.stringify(p.daily || {}), p.prestige | 0, JSON.stringify(p.challenges || {})]
+          p.passwordHash || null, JSON.stringify(p.daily || {}), p.prestige | 0, JSON.stringify(p.challenges || {}), !!p.banned]
       );
     } catch (e) {
       if (e.code === '23505') throw new NameTakenError();
@@ -220,7 +233,7 @@ class PgStore {
     if (type === 'kick') {
       ({ rows } = await this.pool.query(
         `SELECT id, name, best_kick AS value, best_kick_round_id AS round_id, best_kick_index AS kick_index, xp, prestige
-         FROM players WHERE best_kick > 0 ORDER BY best_kick DESC, created_at ASC LIMIT $1`, [limit]));
+         FROM players WHERE best_kick > 0 AND NOT banned ORDER BY best_kick DESC, created_at ASC LIMIT $1`, [limit]));
     } else if (type === 'week') {
       ({ rows } = await this.pool.query(
         `SELECT p.id, p.name, b.score AS value, b.id AS round_id, NULL AS kick_index, p.xp, p.prestige FROM (
@@ -228,11 +241,12 @@ class PgStore {
            WHERE finished AND finished_at > now() - interval '7 days'
            ORDER BY player_id, score DESC, finished_at ASC
          ) b JOIN players p ON p.id = b.player_id
+         WHERE NOT p.banned
          ORDER BY b.score DESC LIMIT $1`, [limit]));
     } else {
       ({ rows } = await this.pool.query(
         `SELECT id, name, best_round AS value, best_round_id AS round_id, NULL AS kick_index, xp, prestige
-         FROM players WHERE best_round > 0 ORDER BY best_round DESC, created_at ASC LIMIT $1`, [limit]));
+         FROM players WHERE best_round > 0 AND NOT banned ORDER BY best_round DESC, created_at ASC LIMIT $1`, [limit]));
     }
     return rows.map((r) => ({
       playerId: r.id, name: r.name, value: Number(r.value), roundId: r.round_id,
@@ -252,6 +266,31 @@ class PgStore {
       return rows[0].n + 1;
     }
     return null;
+  }
+
+
+  /** Permanently delete a player; their rounds and login tokens go with them (ON DELETE CASCADE). */
+  async deletePlayer(id) {
+    await this.pool.query('DELETE FROM players WHERE id = $1', [id]);
+  }
+
+  async createReport(r) {
+    await this.pool.query(
+      'INSERT INTO reports (id, reporter_id, reported_id, reported_name, reason, context) VALUES ($1,$2,$3,$4,$5,$6)',
+      [r.id, r.reporterId, r.reportedId, r.reportedName, r.reason, r.context || null]);
+  }
+
+  async listReports(status, limit) {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM reports WHERE ($1::text IS NULL OR status = $1) ORDER BY created_at DESC LIMIT $2', [status || null, limit]);
+    return rows.map((r) => ({
+      id: r.id, reporterId: r.reporter_id, reportedId: r.reported_id, reportedName: r.reported_name,
+      reason: r.reason, context: r.context, status: r.status, createdAt: new Date(r.created_at).getTime(),
+    }));
+  }
+
+  async setReportStatus(id, status) {
+    await this.pool.query('UPDATE reports SET status = $2 WHERE id = $1', [id, status]);
   }
 
   async stats() {
@@ -393,14 +432,14 @@ class FileStore {
     const players = Object.values(this.data.players);
     let rows;
     if (type === 'kick') {
-      rows = players.filter((p) => p.bestKick > 0)
+      rows = players.filter((p) => p.bestKick > 0 && !p.banned)
         .sort((a, b) => b.bestKick - a.bestKick || a.createdAt - b.createdAt)
         .map((p) => ({ playerId: p.id, name: p.name, value: p.bestKick, roundId: p.bestKickRoundId, kickIndex: p.bestKickIndex, xp: p.xp, prestige: p.prestige || 0 }));
     } else if (type === 'week') {
       const cutoff = Date.now() - WEEK_MS;
       const best = new Map();
       for (const r of Object.values(this.data.rounds)) {
-        if (!r.finished || r.finishedAt < cutoff) continue;
+        if (!r.finished || r.finishedAt < cutoff || !this.data.players[r.playerId] || this.data.players[r.playerId].banned) continue;
         const b = best.get(r.playerId);
         if (!b || r.score > b.score) best.set(r.playerId, r);
       }
@@ -409,7 +448,7 @@ class FileStore {
         return { playerId: p.id, name: p.name, value: r.score, roundId: r.id, kickIndex: null, xp: p.xp, prestige: p.prestige || 0 };
       });
     } else {
-      rows = players.filter((p) => p.bestRound > 0)
+      rows = players.filter((p) => p.bestRound > 0 && !p.banned)
         .sort((a, b) => b.bestRound - a.bestRound || a.createdAt - b.createdAt)
         .map((p) => ({ playerId: p.id, name: p.name, value: p.bestRound, roundId: p.bestRoundId, kickIndex: null, xp: p.xp, prestige: p.prestige || 0 }));
     }
@@ -421,6 +460,34 @@ class FileStore {
     if (type === 'kick') return player.bestKick ? players.filter((p) => p.bestKick > player.bestKick).length + 1 : null;
     if (type === 'round') return player.bestRound ? players.filter((p) => p.bestRound > player.bestRound).length + 1 : null;
     return null;
+  }
+
+
+  async deletePlayer(id) {
+    const p = this.data.players[id];
+    if (!p) return;
+    delete this.data.players[id];
+    this.byName.delete(p.nameKey);
+    for (const [h, pid] of this.byToken) if (pid === id) this.byToken.delete(h);
+    for (const [h, pid] of Object.entries(this.data.tokens)) if (pid === id) delete this.data.tokens[h];
+    for (const [rid, r] of Object.entries(this.data.rounds)) if (r.playerId === id) delete this.data.rounds[rid];
+    this.persist();
+  }
+
+  async createReport(r) {
+    this.data.reports = this.data.reports || [];
+    this.data.reports.push(Object.assign({ status: 'open', createdAt: Date.now() }, this.clone(r)));
+    this.persist();
+  }
+
+  async listReports(status, limit) {
+    return (this.data.reports || []).filter((r) => !status || r.status === status)
+      .sort((a, b) => b.createdAt - a.createdAt).slice(0, limit).map((r) => this.clone(r));
+  }
+
+  async setReportStatus(id, status) {
+    const r = (this.data.reports || []).find((x) => x.id === id);
+    if (r) { r.status = status; this.persist(); }
   }
 
   async stats() {

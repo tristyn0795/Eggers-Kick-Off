@@ -7,7 +7,13 @@
   <meta name="description" content="Help Jason boot the ball to the Click Wise Design office — and beyond. Time your kick, hit the targets, climb the leaderboard." />
   <meta name="theme-color" content="#047dc3" />
   <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kick Off" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
@@ -77,6 +83,7 @@
         <div class="row links">
           <button data-action="howto" class="link">How to play</button>
           <button data-action="patchnotes" class="link">📰 Patch notes <span class="badge hidden" id="patchBadge">NEW</span></button>
+          <button data-install class="link hidden" id="installBtn">📲 Install app</button>
         </div>
       </div>
       <div id="onlineStatus" class="status"></div>
@@ -203,6 +210,9 @@
         <li><b>Career:</b> beat bosses to raise your Skill Level. Reach <b>1,000</b> to go PRO and earn the <b>Mastery Pro Ball</b>.</li>
         <li><b>Online</b> progress is saved to your kicker name. <b>Offline</b> modes keep their own local progress on this device.</li>
       </ul>
+      <h3>Play nice</h3>
+      <ul class="howto"><li>Tap <b>⋯</b> next to any player on the leaderboard, in a room or in chat to <b>block</b> or <b>report</b> them.</li></ul>
+      <p class="legal-links"><a href="/privacy.html" target="_blank" rel="noopener">Privacy policy</a> · <a href="/terms.html" target="_blank" rel="noopener">Terms</a></p>
     </div>
   </section>
 
@@ -231,6 +241,7 @@
 
   <noscript>Eggers Kick Off needs JavaScript to run.</noscript>
 
+  <script src="/app-config.js?v=__ASSET_VERSION__"></script>
   <script src="/shared/physics.js?v=__ASSET_VERSION__"></script>
   <script src="/shared/catalog.js?v=__ASSET_VERSION__"></script>
   <script src="/shared/career.js?v=__ASSET_VERSION__"></script>

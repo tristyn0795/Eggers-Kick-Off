@@ -10,6 +10,14 @@ const P = require('../shared/physics');
 const PORT = 3900 + Math.floor(Math.random() * 90);
 const BASE = `http://127.0.0.1:${PORT}`;
 let proc;
+const ADMIN = 'test-admin-token-0123456789';
+
+async function req(method, p, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(BASE + p, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  return { status: res.status, body: await res.json().catch(() => null), headers: res.headers };
+}
 
 async function api(p, body, token) {
   const headers = { 'Content-Type': 'application/json' };
@@ -31,7 +39,7 @@ function bestFrame(seed, upgrades) {
 test.before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eko-'));
   proc = spawn(process.execPath, [path.join(__dirname, '..', 'src', 'server.js')], {
-    env: Object.assign({}, process.env, { PORT: String(PORT), DATA_DIR: dir, DATABASE_URL: process.env.TEST_DATABASE_URL || '' }),
+    env: Object.assign({}, process.env, { PORT: String(PORT), DATA_DIR: dir, DATABASE_URL: process.env.TEST_DATABASE_URL || '', ADMIN_TOKEN: ADMIN }),
     stdio: 'pipe',
   });
   for (let i = 0; i < 50; i++) {
@@ -240,4 +248,121 @@ test('multiplayer room: create, join, start, live kicks and final standings', as
   assert.strictEqual(final.standings[0].name, 'Host Hannah');
   wa.close();
   wb.close();
+});
+
+function connectWs(token) {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+    ws.msgs = [];
+    ws.waiters = [];
+    ws.on('message', (d) => {
+      const m = JSON.parse(d);
+      ws.msgs.push(m);
+      ws.waiters = ws.waiters.filter((w) => !(w.pred(m) && (w.resolve(m), true)));
+    });
+    ws.wait = (pred) => {
+      const found = ws.msgs.find(pred);
+      if (found) { ws.msgs.splice(ws.msgs.indexOf(found), 1); return Promise.resolve(found); }
+      return new Promise((resolve) => ws.waiters.push({ pred, resolve }));
+    };
+    ws.on('open', () => { ws.send(JSON.stringify({ t: 'hello', token })); resolve(ws); });
+  });
+}
+
+test('offensive names are refused, look-alikes included; innocent words are fine', async () => {
+  for (const name of ['Sh1t Kicker', 'F.U.C.K', 'big ass']) {
+    assert.strictEqual((await api('/api/player', { name })).status, 400, name);
+  }
+  assert.strictEqual((await api('/api/player', { name: 'Therapist Pea' })).status, 200);
+});
+
+test('players can delete their account, and an old device backup cannot bring it back', async () => {
+  const c = await api('/api/player', { name: 'Delete Me' });
+  const token = c.body.token;
+  const { backup, id } = c.body.player;
+  assert.strictEqual((await req('DELETE', '/api/me')).status, 401);
+  const del = await req('DELETE', '/api/me', null, token);
+  assert.strictEqual(del.status, 200);
+  assert.strictEqual((await api('/api/me', null, token)).status, 401);
+  const restore = await api('/api/restore', { token: 'x'.repeat(32), backup });
+  assert.strictEqual(restore.status, 410);
+  assert.ok(id);
+  // The name is free again.
+  assert.strictEqual((await api('/api/player', { name: 'Delete Me' })).status, 200);
+});
+
+test('report, admin review, ban and rename', async () => {
+  const a = await api('/api/player', { name: 'Reporter Rae' });
+  const b = await api('/api/player', { name: 'Rude Rudy' });
+  const ta = a.body.token;
+  const tb = b.body.token;
+  const bid = b.body.player.id;
+
+  // Rudy plays a round so he is on the leaderboard.
+  const start = await api('/api/round/start', {}, tb);
+  for (let i = 0; i < 10; i++) await api('/api/round/kick', { roundId: start.body.roundId, index: i, frame: 60 }, tb);
+  assert.ok((await api('/api/leaderboard?type=round')).body.rows.some((r) => r.playerId === bid));
+
+  assert.strictEqual((await api('/api/report', { playerId: bid, reason: 'nope' }, ta)).status, 400);
+  assert.strictEqual((await api('/api/report', { playerId: a.body.player.id, reason: 'name' }, ta)).status, 400, 'no self-reports');
+  assert.strictEqual((await api('/api/report', { playerId: bid, reason: 'chat', context: 'mean words' })).status, 401);
+  assert.strictEqual((await api('/api/report', { playerId: bid, reason: 'chat', context: 'mean words' }, ta)).status, 200);
+
+  // Admin endpoints are invisible without the admin token.
+  assert.strictEqual((await req('GET', '/api/admin/reports')).status, 404);
+  assert.strictEqual((await req('GET', '/api/admin/reports', null, ta)).status, 404);
+  const list = await req('GET', '/api/admin/reports', null, ADMIN);
+  assert.strictEqual(list.status, 200);
+  const rep = list.body.reports.find((r) => r.reportedId === bid);
+  assert.ok(rep);
+  assert.strictEqual(rep.reportedName, 'Rude Rudy');
+  assert.strictEqual(rep.context, 'mean words');
+
+  const ban = await req('POST', `/api/admin/players/${bid}`, { action: 'ban' }, ADMIN);
+  assert.strictEqual(ban.status, 200);
+  assert.ok(ban.body.banned);
+  assert.ok(!(await api('/api/leaderboard?type=round')).body.rows.some((r) => r.playerId === bid), 'banned players leave the leaderboard');
+  assert.ok(!(await api('/api/leaderboard?type=week')).body.rows.some((r) => r.playerId === bid));
+
+  // Banned players can't use multiplayer.
+  const ws = await connectWs(tb);
+  await ws.wait((m) => m.t === 'hello' && m.ok);
+  ws.send(JSON.stringify({ t: 'room:create' }));
+  const err = await ws.wait((m) => m.t === 'error');
+  assert.match(err.error, /switched off/);
+  ws.close();
+
+  const ren = await req('POST', `/api/admin/players/${bid}`, { action: 'rename' }, ADMIN);
+  assert.match(ren.body.name, /^Kicker \d+$/);
+  assert.strictEqual((await req('POST', `/api/admin/players/${bid}`, { action: 'unban' }, ADMIN)).body.banned, false);
+  assert.strictEqual((await req('POST', `/api/admin/reports/${rep.id}`, { status: 'resolved' }, ADMIN)).status, 200);
+  const open = await req('GET', '/api/admin/reports', null, ADMIN);
+  assert.ok(!open.body.reports.some((r) => r.id === rep.id), 'resolved reports leave the open queue');
+});
+
+test('room chat is masked and carries the sender id (for report/block)', async () => {
+  const a = await api('/api/player', { name: 'Chatty Cat' });
+  const ws = await connectWs(a.body.token);
+  await ws.wait((m) => m.t === 'hello' && m.ok);
+  ws.send(JSON.stringify({ t: 'room:create' }));
+  await ws.wait((m) => m.t === 'room:state');
+  ws.send(JSON.stringify({ t: 'room:chat', text: 'nice kick you sh1t' }));
+  const msg = await ws.wait((m) => m.t === 'room:chat');
+  assert.strictEqual(msg.id, a.body.player.id);
+  assert.strictEqual(msg.text, 'nice kick you ****');
+  ws.close();
+});
+
+test('app shells: CORS for Capacitor origins, Digital Asset Links endpoint', async () => {
+  const pre = await fetch(BASE + '/api/me', { method: 'OPTIONS', headers: { Origin: 'capacitor://localhost', 'Access-Control-Request-Method': 'GET' } });
+  assert.strictEqual(pre.status, 204);
+  assert.strictEqual(pre.headers.get('access-control-allow-origin'), 'capacitor://localhost');
+  const other = await fetch(BASE + '/api/health', { headers: { Origin: 'https://evil.example' } });
+  assert.strictEqual(other.headers.get('access-control-allow-origin'), null);
+  const links = await fetch(BASE + '/.well-known/assetlinks.json');
+  assert.strictEqual(links.status, 200);
+  assert.deepStrictEqual(await links.json(), []);
+  for (const page of ['/privacy.html', '/terms.html', '/icons/icon-512.png', '/manifest.webmanifest']) {
+    assert.strictEqual((await fetch(BASE + page)).status, 200, page);
+  }
 });

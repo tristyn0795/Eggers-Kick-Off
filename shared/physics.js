@@ -22,6 +22,9 @@
   const BASE_SPEED = 95;
   const MAX_FLIGHT_FRAMES = 60 * 900;
   const KICKS_PER_ROUND = 10;
+  // Bump whenever kick physics, scoring or targets change. Store-installed apps carry their own
+  // copy of this file; an app with an older RULES_VERSION is asked to update before playing online.
+  const RULES_VERSION = 1;
   const FIELD_LENGTH = 160000;
 
   // Topgolf-style targets on the field. Points are awarded for where the ball

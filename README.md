@@ -107,6 +107,17 @@ Environment variables:
 | `PGSSL` | – | Set to `disable` if your Postgres doesn't use SSL |
 | `PROFILE_SECRET` | stored in DB | Signing key for progress backups — set it so backups survive a database replacement |
 | `ALLOW_EPHEMERAL_STORAGE` | – | `true` lets a hosted server run without a database (data is lost on deploy!) |
+| `ADMIN_TOKEN` | – | Long random string that unlocks the moderation endpoints (see `store/MODERATION.md`) |
+| `ANDROID_PACKAGE` | `com.clickwisedesign.eggerskickoff` | Android app id for `/.well-known/assetlinks.json` |
+| `ANDROID_SHA256` | – | Play app-signing SHA-256 fingerprint(s), comma-separated; makes the Android app full-screen |
+| `APP_ORIGINS` | – | Extra origins allowed to call the API (Capacitor's are built in) |
+
+## Phone apps (Google Play & App Store)
+
+Everything for the stores lives in [`store/`](store/README.md): checklists, listing copy, privacy
+and rating answers, icons, screenshots, the Android (TWA) config and the iOS (Capacitor) steps.
+`npm run build:app` bundles the game into `app-dist/` for the iOS app. Players can also install the
+website as an app today with the **📲 Install app** button (Android/desktop) or Share → Add to Home Screen (iPhone).
 
 ## Run locally
 ```bash
@@ -123,6 +134,9 @@ shared/career.js    Career bosses, CPU kicks, skill level (client & server)
 public/js/patchnotes.js  in-game patch notes
 src/server.js       Express API + WebSocket rooms, live feed
 src/store.js        Postgres store with JSON-file fallback
+src/moderation.js   name/chat word filter (players can also report & block)
+scripts/build-app.js  bundles the game for the iOS/Android app shells
+store/              app store prep kit (see store/README.md)
 public/js/render.js canvas renderer (Jason, field, targets, landmarks, office)
 public/js/game.js   game loop & kick state machine
 public/js/app.js    menus, shop, leaderboard, rooms, online/offline profiles

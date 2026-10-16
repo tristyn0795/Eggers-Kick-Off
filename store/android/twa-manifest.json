@@ -1,0 +1,39 @@
+{
+  "packageId": "com.clickwisedesign.eggerskickoff",
+  "host": "eggers-kick-off-production.up.railway.app",
+  "name": "Eggers Kick Off",
+  "launcherName": "Kick Off",
+  "display": "fullscreen",
+  "orientation": "default",
+  "themeColor": "#047dc3",
+  "themeColorDark": "#047dc3",
+  "navigationColor": "#047dc3",
+  "navigationColorDark": "#047dc3",
+  "navigationDividerColor": "#047dc3",
+  "navigationDividerColorDark": "#047dc3",
+  "backgroundColor": "#4fb3f6",
+  "enableNotifications": false,
+  "startUrl": "/?source=twa",
+  "iconUrl": "https://eggers-kick-off-production.up.railway.app/icons/icon-512.png",
+  "maskableIconUrl": "https://eggers-kick-off-production.up.railway.app/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "eggerskickoff"
+  },
+  "appVersionName": "1.6.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://eggers-kick-off-production.up.railway.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": false,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://eggers-kick-off-production.up.railway.app/",
+  "minSdkVersion": 21
+}

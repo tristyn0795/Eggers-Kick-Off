@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Full-bleed square: the OS rounds the corners. Key art stays inside the central 80% (maskable safe zone). -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a8fe0"/>
+      <stop offset="1" stop-color="#4fb3f6"/>
+    </linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5cc45f"/>
+      <stop offset="1" stop-color="#2e8f3a"/>
+    </linearGradient>
+    <radialGradient id="ballShade" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.7" stop-color="#f1f4f7"/>
+      <stop offset="1" stop-color="#c9d3dc"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <circle cx="820" cy="210" r="70" fill="#ffd54a" opacity="0.95"/>
+  <path d="M0 760 Q512 650 1024 760 L1024 1024 L0 1024 Z" fill="url(#grass)"/>
+  <path d="M0 800 Q512 700 1024 800" stroke="#7ad67c" stroke-width="10" fill="none" opacity="0.6"/>
+  <!-- speed streaks -->
+  <g stroke="#ffffff" stroke-linecap="round" opacity="0.9">
+    <line x1="190" y1="430" x2="380" y2="470" stroke-width="34"/>
+    <line x1="230" y1="545" x2="380" y2="560" stroke-width="28" opacity="0.8"/>
+    <line x1="270" y1="650" x2="400" y2="645" stroke-width="22" opacity="0.7"/>
+  </g>
+  <!-- ball -->
+  <g transform="translate(560 520) rotate(-18)">
+    <circle r="210" fill="url(#ballShade)" stroke="#15222e" stroke-width="18"/>
+    <polygon points="0,-78 74,-24 46,63 -46,63 -74,-24" fill="#15222e"/>
+    <g stroke="#15222e" stroke-width="14" stroke-linecap="round">
+      <line x1="0" y1="-78" x2="0" y2="-150"/>
+      <line x1="74" y1="-24" x2="143" y2="-46"/>
+      <line x1="46" y1="63" x2="88" y2="122"/>
+      <line x1="-46" y1="63" x2="-88" y2="122"/>
+      <line x1="-74" y1="-24" x2="-143" y2="-46"/>
+    </g>
+    <path d="M-40 -205 L0 -150 L40 -205 Z" fill="#15222e"/>
+    <path d="M200 -66 L143 -46 L170 -120 Z" fill="#15222e"/>
+    <path d="M128 165 L88 122 L160 112 Z" fill="#15222e" opacity="0.9"/>
+    <path d="M-128 165 L-88 122 L-160 112 Z" fill="#15222e" opacity="0.9"/>
+    <path d="M-200 -66 L-143 -46 L-170 -120 Z" fill="#15222e"/>
+  </g>
+</svg>

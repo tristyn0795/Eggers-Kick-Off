@@ -11,6 +11,7 @@ const C = require('../shared/catalog');
 const K = require('../shared/career');
 const CH = require('../shared/challenges');
 const { createStore, NameTakenError } = require('./store');
+const { isOffensive, maskText } = require('./moderation');
 
 const PORT = Number(process.env.PORT) || 3000;
 const KICKS = P.KICKS_PER_ROUND;
@@ -29,13 +30,11 @@ class HttpError extends Error {
   }
 }
 
-const BLOCKED_WORDS = ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'bitch', 'whore', 'slut', 'rape', 'nazi'];
 function cleanName(raw) {
   const name = String(raw || '').replace(/\s+/g, ' ').trim();
   if (name.length < 2 || name.length > 16) throw new HttpError(400, 'Name must be 2–16 characters');
   if (!/^[\p{L}\p{N} _.'-]+$/u.test(name)) throw new HttpError(400, 'Letters, numbers, spaces and _ . \' - only');
-  const flat = name.toLowerCase().replace(/[^a-z]/g, '');
-  if (BLOCKED_WORDS.some((w) => flat.includes(w))) throw new HttpError(400, 'Please pick a different name');
+  if (isOffensive(name)) throw new HttpError(400, 'Please pick a different name');
   return { name, nameKey: name.toLowerCase() };
 }
 
@@ -99,6 +98,7 @@ function publicPlayer(p) {
     hasPassword: !!p.passwordHash,
     prestige: p.prestige | 0,
     challenges: p.challenges || {},
+    banned: !!p.banned,
     backup: signBackup(p),
   };
 }
@@ -140,6 +140,34 @@ async function main() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
 
+  // The iOS/Android app shells load the game from inside the app (capacitor://localhost or
+  // https://localhost) and call this server, so those origins (plus any in APP_ORIGINS) may use the API.
+  const appOrigins = new Set(['capacitor://localhost', 'ionic://localhost', 'https://localhost', 'http://localhost',
+    ...String(process.env.APP_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)]);
+  app.use('/api', (req, res, next) => {
+    const origin = req.get('origin');
+    if (origin && appOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
+
+  // Digital Asset Links: lets the Google Play app (a Trusted Web Activity) open this site full-screen
+  // with no browser bar. Set ANDROID_PACKAGE and ANDROID_SHA256 (from Play Console → App signing).
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    const pkg = process.env.ANDROID_PACKAGE || 'com.clickwisedesign.eggerskickoff';
+    const prints = String(process.env.ANDROID_SHA256 || '').split(',').map((s) => s.trim()).filter(Boolean);
+    res.json(prints.length ? [{
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: { namespace: 'android_app', package_name: pkg, sha256_cert_fingerprints: prints },
+    }] : []);
+  });
+
   // Every response for game files must be revalidated (cheap 304s when unchanged), and the
   // page links its CSS/JS with a per-deploy version so a phone can never mix an old
   // stylesheet with a new page (that once stacked the HUD into a column).
@@ -171,7 +199,8 @@ async function main() {
   };
   const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).then((out) => res.json(out), next);
 
-  app.get('/api/health', wrap(async () => ({ ok: true, store: store.kind, online: sockets.size })));
+  const APP_VERSION = require('../package.json').version;
+  app.get('/api/health', wrap(async () => ({ ok: true, store: store.kind, online: sockets.size, version: APP_VERSION, rules: P.RULES_VERSION })));
 
   app.post('/api/player', rateLimit({ windowMs: 3600e3, max: 20 }), wrap(async (req) => {
     const { name, nameKey } = cleanName(req.body && req.body.name);
@@ -197,6 +226,7 @@ async function main() {
     const data = verifyBackup(backup);
     if (!data || data.v !== 1 || typeof data.id !== 'string') throw new HttpError(400, 'That backup could not be verified');
     if (await store.getPlayer(data.id)) throw new HttpError(409, 'That profile still exists — log in with your name and password');
+    if (await store.getSetting('deleted:' + data.id)) throw new HttpError(410, 'That profile was deleted');
     let { name, nameKey } = cleanName(data.name);
     for (let i = 2; (await store.getPlayerByNameKey(nameKey)) && i < 100; i++) {
       name = `${data.name.slice(0, 13)} ${i}`;
@@ -269,6 +299,73 @@ async function main() {
       throw e;
     }
     return { player: publicPlayer(p) };
+  })));
+
+  // Delete the account and everything tied to it (required by both app stores).
+  app.delete('/api/me', auth, wrap(async (req) => withLock('p:' + req.player.id, async () => {
+    const id = req.player.id;
+    await store.deletePlayer(id);
+    await store.setSetting('deleted:' + id, String(Date.now())); // so an old device backup can't bring it back
+    for (const ws of sockets) {
+      if (ws.player && ws.player.id === id) { leaveRoom(ws); ws.player = null; }
+    }
+    console.log(`Deleted profile ${id} at the player's request`);
+    return { deleted: true };
+  })));
+
+  // Players report names or chat they find abusive; an admin reviews them.
+  const REPORT_REASONS = ['name', 'chat', 'cheating', 'other'];
+  app.post('/api/report', auth, rateLimit({ windowMs: 3600e3, max: 20 }), wrap(async (req) => {
+    const { playerId, reason, context } = req.body || {};
+    if (typeof playerId !== 'string' || playerId === req.player.id) throw new HttpError(400, 'Pick a player to report');
+    if (!REPORT_REASONS.includes(reason)) throw new HttpError(400, 'Pick a reason');
+    const target = await store.getPlayer(playerId);
+    if (!target) throw new HttpError(404, 'Player not found');
+    await store.createReport({
+      id: newId(), reporterId: req.player.id, reportedId: target.id, reportedName: target.name,
+      reason, context: String(context || '').slice(0, 300),
+    });
+    return { ok: true };
+  }));
+
+  // Moderation for whoever runs the game. Set ADMIN_TOKEN (a long random string) on the server and
+  // send it as "Authorization: Bearer <token>". Without ADMIN_TOKEN these endpoints are switched off.
+  const adminAuth = (req, res, next) => {
+    const want = process.env.ADMIN_TOKEN || '';
+    const m = /^Bearer (.+)$/.exec(req.get('authorization') || '');
+    const ok = want.length >= 16 && m && m[1].length === want.length && crypto.timingSafeEqual(Buffer.from(m[1]), Buffer.from(want));
+    if (!ok) return next(new HttpError(404, 'Not found'));
+    next();
+  };
+  app.get('/api/admin/reports', adminAuth, wrap(async (req) => {
+    const status = ['open', 'resolved', 'dismissed'].includes(req.query.status) ? req.query.status : req.query.status === 'all' ? null : 'open';
+    return { reports: await store.listReports(status, 200) };
+  }));
+  app.post('/api/admin/reports/:id', adminAuth, wrap(async (req) => {
+    const status = (req.body && req.body.status) === 'resolved' ? 'resolved' : 'dismissed';
+    await store.setReportStatus(req.params.id, status);
+    return { ok: true };
+  }));
+  app.post('/api/admin/players/:id', adminAuth, wrap(async (req) => withLock('p:' + req.params.id, async () => {
+    const p = await store.getPlayer(req.params.id);
+    if (!p) throw new HttpError(404, 'Player not found');
+    const { action } = req.body || {};
+    if (action === 'ban' || action === 'unban') p.banned = action === 'ban';
+    else if (action === 'rename') {
+      // Give the player a neutral name; they can choose a new one in Profile.
+      let name;
+      do { name = `Kicker ${crypto.randomInt(1000, 99999)}`; } while (await store.getPlayerByNameKey(name.toLowerCase()));
+      Object.assign(p, { name, nameKey: name.toLowerCase() });
+    } else throw new HttpError(400, 'action must be ban, unban or rename');
+    await store.savePlayer(p);
+    for (const ws of sockets) {
+      if (ws.player && ws.player.id === p.id) {
+        ws.player.name = p.name;
+        ws.player.banned = !!p.banned;
+        if (p.banned) leaveRoom(ws);
+      }
+    }
+    return { id: p.id, name: p.name, banned: !!p.banned };
   })));
 
   app.post('/api/shop/buy', auth, wrap(async (req) => withLock('p:' + req.player.id, async () => {
@@ -438,7 +535,7 @@ async function main() {
     const ticks = P.playbackTicks(result.flightFrames);
     const revealMs = Math.min(30000, Math.round((ticks / 60) * 1000) + 300);
     setTimeout(() => {
-      if (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office))) {
+      if (!player.banned && (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office)))) {
         broadcastAll({ t: 'feed', playerId: player.id, name: player.name, distance: result.distance, target: result.target, label: result.label });
       }
       if (round.room) roomKick(round.room, player, round, points, result);
@@ -584,10 +681,13 @@ async function main() {
   async function handleWs(ws, msg) {
     if (msg.t === 'hello') {
       const p = typeof msg.token === 'string' ? await store.getPlayerByTokenHash(sha256(msg.token)) : null;
-      ws.player = p ? { id: p.id, name: p.name } : null;
+      ws.player = p ? { id: p.id, name: p.name, banned: !!p.banned } : null;
       return send(ws, { t: 'hello', ok: !!p, online: sockets.size });
     }
     if (!ws.player) return send(ws, { t: 'error', error: 'Sign in to use rooms' });
+    if (ws.player.banned && msg.t.startsWith('room:') && msg.t !== 'room:leave') {
+      return send(ws, { t: 'error', error: 'Multiplayer is switched off for this account' });
+    }
 
     if (msg.t === 'room:create') {
       leaveRoom(ws);
@@ -634,8 +734,8 @@ async function main() {
       roomSync(room);
     } else if (msg.t === 'room:chat') {
       const room = rooms.get(ws.roomCode);
-      const text = String(msg.text || '').slice(0, 120).trim();
-      if (room && text) roomBroadcast(room, { t: 'room:chat', name: ws.player.name, text });
+      const text = maskText(String(msg.text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 120).trim());
+      if (room && text) roomBroadcast(room, { t: 'room:chat', id: ws.player.id, name: ws.player.name, text });
     }
   }
 

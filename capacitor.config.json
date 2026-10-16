@@ -1,0 +1,14 @@
+{
+  "appId": "com.clickwisedesign.eggerskickoff",
+  "appName": "Eggers Kick Off",
+  "webDir": "app-dist",
+  "backgroundColor": "#4fb3f6",
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "backgroundColor": "#4fb3f6"
+  }
+}
