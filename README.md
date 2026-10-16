@@ -44,7 +44,7 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 | Mode | Online? | Notes |
 |---|---|---|
 | **Play Online** | ✅ | Ranked 10-kick round. Counts for the leaderboards. |
-| **Career** | ✅ / ❌ | Wii Sports-style ladder of 12 bosses in 4 tiers. Head-to-head on the same 10 balls. Wins raise your Skill Level; reach **1,000 to go PRO** and earn the **Mastery Pro Ball**. Server-verified when signed in, local when offline. |
+| **Career** | ✅ / ❌ | Wii Sports-style ladder of 12 bosses in 4 tiers. Head-to-head on the same 10 balls; bosses scale their gear to your upgrades, and every loss costs skill. Wins raise your Skill Level; reach **1,000 to go PRO** and earn the **Mastery Pro Ball**. Server-verified when signed in, local when offline. |
 | **Multiplayer Room** | ✅ | 4-letter room code or invite link. Everyone gets the same 10 juggles, wind and field, with live standings and chat. The host can turn on "level playing field" (no upgrades). |
 | **Challenge a friend** | ✅ | Share a link. Your friend plays your exact 10 kicks to try to beat your score. Leaderboard rows have "Beat it" buttons too. |
 | **Casual Round** | ❌ | Offline 10-kick round with its own local progress. |

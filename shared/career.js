@@ -26,18 +26,18 @@
 
   // gear = upgrade level on every upgrade; accuracy = how close to their best kick they get.
   const BOSSES = [
-    { id: 'henry', name: 'Henry the Duck', avatar: '🪿', tier: 'amateur', rating: 100, gear: 0, accuracy: 0.3, reward: 150, taunt: 'Quack. That means "good luck".' },
-    { id: 'ivy', name: 'Intern Ivy', avatar: '🧑‍💻', tier: 'amateur', rating: 200, gear: 0, accuracy: 0.5, reward: 250, taunt: 'I watched a YouTube tutorial on this.' },
-    { id: 'carl', name: 'Coach Carl', avatar: '🧢', tier: 'amateur', rating: 320, gear: 1, accuracy: 0.6, reward: 400, taunt: 'Plant foot! Follow through! Hustle!' },
-    { id: 'pete', name: 'Pizza Pete', avatar: '🍕', tier: 'semipro', rating: 450, gear: 2, accuracy: 0.65, reward: 600, taunt: 'Extra cheese, extra distance.' },
-    { id: 'betty', name: 'Billboard Betty', avatar: '📣', tier: 'semipro', rating: 580, gear: 3, accuracy: 0.7, reward: 800, taunt: 'Your name will never be on my billboard.' },
-    { id: 'kilo', name: 'Captain Kilometre', avatar: '🦸', tier: 'semipro', rating: 720, gear: 4, accuracy: 0.75, reward: 1100, taunt: 'I measure my kicks in kilometres.' },
-    { id: 'dana', name: 'Downtown Dana', avatar: '🏙️', tier: 'pro', rating: 860, gear: 5, accuracy: 0.8, reward: 1500, taunt: 'I kick from rooftop to rooftop.' },
-    { id: 'sensei', name: 'The Sensei', avatar: '🥋', tier: 'pro', rating: 1000, gear: 6, accuracy: 0.84, reward: 2000, taunt: 'Jason… your gi is not ready.' },
-    { id: 'ace', name: 'Air Marshal Ace', avatar: '✈️', tier: 'pro', rating: 1150, gear: 7, accuracy: 0.88, reward: 2600, taunt: 'Cleared for take-off. You are not.' },
-    { id: 'mo', name: 'Mountain Mo', avatar: '🏔️', tier: 'legend', rating: 1300, gear: 8, accuracy: 0.9, reward: 3500, taunt: 'The air is thin up here.' },
-    { id: 'vic', name: 'Volcano Vic', avatar: '🌋', tier: 'legend', rating: 1500, gear: 9, accuracy: 0.93, reward: 5000, taunt: 'My kicks erupt.' },
-    { id: 'max', name: 'Moon Boss Max', avatar: '🌕', tier: 'legend', rating: 1800, gear: 10, accuracy: 0.97, reward: 10000, taunt: 'One small kick for me…' },
+    { id: 'henry', edge: -4, name: 'Henry the Duck', avatar: '🪿', tier: 'amateur', rating: 100, gear: 0, accuracy: 0.3, reward: 150, taunt: 'Quack. That means "good luck".' },
+    { id: 'ivy', edge: -3, name: 'Intern Ivy', avatar: '🧑‍💻', tier: 'amateur', rating: 200, gear: 0, accuracy: 0.5, reward: 250, taunt: 'I watched a YouTube tutorial on this.' },
+    { id: 'carl', edge: -2, name: 'Coach Carl', avatar: '🧢', tier: 'amateur', rating: 320, gear: 1, accuracy: 0.6, reward: 400, taunt: 'Plant foot! Follow through! Hustle!' },
+    { id: 'pete', edge: -1, name: 'Pizza Pete', avatar: '🍕', tier: 'semipro', rating: 450, gear: 2, accuracy: 0.65, reward: 600, taunt: 'Extra cheese, extra distance.' },
+    { id: 'betty', edge: 0, name: 'Billboard Betty', avatar: '📣', tier: 'semipro', rating: 580, gear: 3, accuracy: 0.7, reward: 800, taunt: 'Your name will never be on my billboard.' },
+    { id: 'kilo', edge: 1, name: 'Captain Kilometre', avatar: '🦸', tier: 'semipro', rating: 720, gear: 4, accuracy: 0.75, reward: 1100, taunt: 'I measure my kicks in kilometres.' },
+    { id: 'dana', edge: 2, name: 'Downtown Dana', avatar: '🏙️', tier: 'pro', rating: 860, gear: 5, accuracy: 0.8, reward: 1500, taunt: 'I kick from rooftop to rooftop.' },
+    { id: 'sensei', edge: 3, name: 'The Sensei', avatar: '🥋', tier: 'pro', rating: 1000, gear: 6, accuracy: 0.84, reward: 2000, taunt: 'Jason… your gi is not ready.' },
+    { id: 'ace', edge: 4, name: 'Air Marshal Ace', avatar: '✈️', tier: 'pro', rating: 1150, gear: 7, accuracy: 0.88, reward: 2600, taunt: 'Cleared for take-off. You are not.' },
+    { id: 'mo', edge: 5, name: 'Mountain Mo', avatar: '🏔️', tier: 'legend', rating: 1300, gear: 8, accuracy: 0.9, reward: 3500, taunt: 'The air is thin up here.' },
+    { id: 'vic', edge: 6, name: 'Volcano Vic', avatar: '🌋', tier: 'legend', rating: 1500, gear: 9, accuracy: 0.93, reward: 5000, taunt: 'My kicks erupt.' },
+    { id: 'max', edge: 8, name: 'Moon Boss Max', avatar: '🌕', tier: 'legend', rating: 1800, gear: 10, accuracy: 0.97, reward: 10000, taunt: 'One small kick for me…' },
   ];
 
   function newCareer() {
@@ -59,39 +59,62 @@
     return i === 0 || (career.beaten || []).includes(BOSSES[i - 1].id);
   }
 
-  function gearFor(boss) {
-    const L = boss.gear;
+  function avgUpgradeLevel(upgrades) {
+    const u = upgrades || {};
+    const ids = ['boots', 'ball', 'training', 'focus', 'aero', 'luck'];
+    return ids.reduce((n, k) => n + Math.max(0, u[k] | 0), 0) / ids.length;
+  }
+
+  /**
+   * Bosses scale with you (like Wii Sports opponents): each kicks with gear at your
+   * average upgrade level plus its own edge, and never below its base gear. Upgrading
+   * never makes Career trivial — beating a boss always comes down to timing.
+   */
+  function bossGearLevel(boss, playerUpgrades) {
+    const scaled = Math.round(avgUpgradeLevel(playerUpgrades) + (boss.edge || 0));
+    return Math.max(0, Math.min(P.MAX_UPGRADE_LEVEL, Math.max(boss.gear, scaled)));
+  }
+
+  function gearFor(boss, playerUpgrades) {
+    const L = bossGearLevel(boss, playerUpgrades);
     return { boots: L, ball: L, training: L, focus: L, aero: L, luck: L };
   }
 
-  /** The boss's 10 kicks for a round seed. Deterministic. */
-  function cpuRound(baseSeed, boss) {
-    const gear = gearFor(boss);
-    const rng = P.mulberry32(P.hashSeed(baseSeed >>> 0, P.hashSeed(boss.rating, 0xB055)));
+  /** The boss's kick on ball `i` of a round. Deterministic, and cheap enough to reveal one at a time. */
+  function cpuKick(baseSeed, boss, i, playerUpgrades) {
+    const gear = gearFor(boss, playerUpgrades);
+    const rng = P.mulberry32(P.hashSeed(P.hashSeed(baseSeed >>> 0, P.hashSeed(boss.rating, 0xB055)), i));
+    const seed = P.kickSeed(baseSeed, i);
+    const options = [];
+    for (let f = 0; f < CPU_FRAMES; f += 2) options.push(P.simulateKick(seed, f, gear));
+    options.sort((a, b) => b.distance - a.distance);
+    // Higher accuracy picks closer to the best possible kick on that ball.
+    const spread = (1 - boss.accuracy) * 0.7;
+    const rank = Math.min(options.length - 1, Math.floor(options.length * spread * (0.3 + rng() * 1.4)));
+    const r = options[rank];
+    return { distance: r.distance, points: P.scoreKick(r, i, P.KICKS_PER_ROUND), target: r.target, label: r.label };
+  }
+
+  /** The boss's 10 kicks for a round seed. */
+  function cpuRound(baseSeed, boss, playerUpgrades) {
     const kicks = [];
     let total = 0;
     for (let i = 0; i < P.KICKS_PER_ROUND; i++) {
-      const seed = P.kickSeed(baseSeed, i);
-      const options = [];
-      for (let f = 0; f < CPU_FRAMES; f++) options.push(f);
-      const dist = options.map((f) => P.simulateKick(seed, f, gear));
-      dist.sort((a, b) => b.distance - a.distance);
-      // Higher accuracy picks closer to the best possible kick on that ball.
-      const spread = (1 - boss.accuracy) * 0.7;
-      const rank = Math.min(dist.length - 1, Math.floor(dist.length * spread * (0.3 + rng() * 1.4)));
-      const r = dist[rank];
-      const points = P.scoreKick(r, i, P.KICKS_PER_ROUND);
-      total += points;
-      kicks.push({ distance: r.distance, points, target: r.target, label: r.label });
+      const k = cpuKick(baseSeed, boss, i, playerUpgrades);
+      total += k.points;
+      kicks.push(k);
     }
     return { kicks, total };
   }
 
-  /** Wii-style skill change: big gains for beating stronger bosses, small losses. */
+  /**
+   * Wii-style skill change: big gains for beating stronger bosses. Every loss costs
+   * skill — a little against a stronger boss, a lot against a weaker one.
+   */
   function skillDelta(skill, boss, won) {
     const gap = boss.rating - skill;
     if (won) return Math.max(10, Math.min(140, Math.round(45 + gap * 0.15)));
-    return -Math.max(0, Math.min(70, Math.round(20 - gap * 0.08)));
+    return -Math.max(15, Math.min(90, Math.round(30 - gap * 0.08)));
   }
 
   /**
@@ -124,6 +147,6 @@
 
   return {
     PRO_SKILL, MAX_SKILL, TIERS, BOSSES,
-    newCareer, normalize, bossById, isUnlocked, gearFor, cpuRound, skillDelta, applyResult,
+    newCareer, normalize, bossById, isUnlocked, avgUpgradeLevel, bossGearLevel, gearFor, cpuKick, cpuRound, skillDelta, applyResult,
   };
 });

@@ -383,3 +383,7 @@ button.gold small { color: rgba(59, 42, 0, 0.75) !important; }
 .prestige-card { grid-column: 1 / -1; border: 2px solid #e8dcff; background: linear-gradient(180deg, #faf6ff, #fff); border-radius: 16px; padding: 16px; }
 .prestige-rank { font-family: var(--font-display); font-size: 40px; color: #7c4dff; line-height: 1; }
 .prestige-card .btn { width: 100%; margin-top: 6px; }
+
+/* ---------- v1.4 ---------- */
+.pw-form { gap: 8px; margin: 6px 0 10px; }
+.pw-form .error { margin: 0; }

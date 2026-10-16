@@ -161,7 +161,7 @@ test('career match is verified by the server', async () => {
     last = await api('/api/round/kick', { roundId, index: i, frame }, token);
   }
   const c = last.body.summary.career;
-  assert.strictEqual(c.cpuTotal, K.cpuRound(baseSeed, K.bossById('henry')).total);
+  assert.strictEqual(c.cpuTotal, K.cpuRound(baseSeed, K.bossById('henry'), upgrades).total);
   assert.strictEqual(c.won, last.body.total > c.cpuTotal);
   assert.ok(c.won, 'perfect play beats Henry');
   assert.ok(last.body.player.career.skill > 0);

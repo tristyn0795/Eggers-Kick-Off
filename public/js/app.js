@@ -489,17 +489,27 @@
   }
 
   /** Attach the boss's kicks to the current round; they're revealed one by one after each of yours lands. */
-  function attachBoss(cur, boss, baseSeed) {
+  function attachBoss(cur, boss, baseSeed, upgrades) {
     cur.boss = boss;
-    cur.cpu = EKCareer.cpuRound(baseSeed, boss);
+    cur.cpuArgs = { baseSeed, upgrades: upgrades || {} };
+    cur.cpu = { kicks: [] };
     cur.cpuTotal = 0;
+  }
+
+  /** Boss kicks are computed one at a time, as they're revealed, so phones never stall. */
+  function bossKick(cur, i) {
+    while (cur.cpu.kicks.length <= i) {
+      const n = cur.cpu.kicks.length;
+      cur.cpu.kicks.push(EKCareer.cpuKick(cur.cpuArgs.baseSeed, cur.boss, n, cur.cpuArgs.upgrades));
+    }
+    return cur.cpu.kicks[i];
   }
 
   hud.onResult = (r) => {
     renderRoomPanel();
     const cur = S.current;
     if (!cur || !cur.cpu || r.index == null) return null;
-    const ck = cur.cpu.kicks[r.index];
+    const ck = bossKick(cur, r.index);
     cur.cpuTotal = cur.cpu.kicks.slice(0, r.index + 1).reduce((n, k) => n + k.points, 0);
     $('#hudVs').textContent = fmt(cur.cpuTotal);
     const lead = (game.total || 0) - cur.cpuTotal;
@@ -510,7 +520,7 @@
   function beginOnlineRound(opts) {
     let chain = Promise.resolve();
     const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], milestones: [], challenge: opts.challenge || null };
-    if (opts.boss) attachBoss(cur, opts.boss, opts.baseSeed);
+    if (opts.boss) attachBoss(cur, opts.boss, opts.baseSeed, opts.upgrades);
     S.current = cur;
     hideScreens();
     hud.show('play', { beat: opts.beat, vs: opts.boss });
@@ -557,7 +567,7 @@
     const endless = kicks === Infinity;
     const baseSeed = (Math.random() * 2 ** 32) >>> 0;
     const cur = { kind: boss ? 'career' : endless ? 'freekick' : 'casual', kicks: [], milestones: [], offline: true };
-    if (boss) attachBoss(cur, boss, baseSeed);
+    if (boss) attachBoss(cur, boss, baseSeed, Object.assign({}, prof.upgrades));
     S.current = cur;
     let total = 0;
     hideScreens();
@@ -591,7 +601,9 @@
         if (newBestRound) prof.bestRound = total;
         let career = null;
         if (boss) {
-          const applied = EKCareer.applyResult(prof.career, boss, total, cur.cpu.total);
+          bossKick(cur, P.KICKS_PER_ROUND - 1);
+          const cpuTotal = cur.cpu.kicks.reduce((n, k) => n + k.points, 0);
+          const applied = EKCareer.applyResult(prof.career, boss, total, cpuTotal);
           prof.career = applied.career;
           prof.coins += applied.outcome.reward;
           career = applied.outcome;
@@ -846,7 +858,7 @@
         return `<div class="boss ${open ? '' : 'locked'} ${beaten ? 'beaten' : ''}">
           <div class="boss-avatar">${open ? b.avatar : '❔'}</div>
           <div class="boss-info"><b>${open ? esc(b.name) : '???'}</b>
-            <span class="muted small">Rating ${fmt(b.rating)} · Gear Lv ${b.gear} · ${beaten ? 'bounty claimed' : `bounty 🪙 ${fmt(b.reward)}`}</span>
+            <span class="muted small">Rating ${fmt(b.rating)} · Gear Lv ${EKCareer.bossGearLevel(b, prof.upgrades)} · ${beaten ? 'bounty claimed' : `bounty 🪙 ${fmt(b.reward)}`}</span>
             ${open ? `<i class="taunt">“${esc(b.taunt)}”</i>` : ''}${status}</div>
           ${open ? `<button class="btn ${beaten ? '' : 'primary'}" data-boss="${b.id}">${beaten ? 'Rematch' : 'Challenge'}</button>` : ''}
         </div>`;
@@ -1270,9 +1282,13 @@
         <div class="banner ${p.hasPassword ? 'green' : ''}">${p.hasPassword
           ? '🔒 Password set — log in with your kicker name on any device.'
           : '⚠️ Set a password so you can log in on any device and never lose your progress.'}</div>
-        <form id="passwordForm" class="inline"><input id="passwordInput" type="password" maxlength="64" minlength="4"
-          placeholder="${p.hasPassword ? 'New password' : 'Choose a password (4+ characters)'}" autocomplete="new-password" />
-          <button type="submit">${p.hasPassword ? 'Change' : 'Set password'}</button></form>
+        <form id="passwordForm" class="pw-form">
+          <input id="passwordInput" type="password" maxlength="64" minlength="4"
+            placeholder="${p.hasPassword ? 'New password' : 'Choose a password (4+ characters)'}" autocomplete="new-password" />
+          <input id="passwordConfirm" type="password" maxlength="64" minlength="4" placeholder="Type it again to confirm" autocomplete="new-password" />
+          <label class="toggle"><input type="checkbox" data-showpw="#passwordInput,#passwordConfirm" /> 👁 Show password</label>
+          <p class="error" id="passwordError"></p>
+          <button class="btn primary" type="submit">${p.hasPassword ? 'Change password' : 'Set password'}</button></form>
         <details><summary>Transfer code (play on another device)</summary>
           <p class="muted">Keep this secret — anyone with it can use your profile. Paste it into "Already played on another device?" on the other device.</p>
           <code class="token">${esc(S.token)}</code>
@@ -1295,8 +1311,12 @@
     if (pf) {
       pf.onsubmit = async (e) => {
         e.preventDefault();
+        const pw = $('#passwordInput').value;
+        $('#passwordError').textContent = '';
+        if (pw.length < 4) { $('#passwordError').textContent = 'Use at least 4 characters'; return; }
+        if (pw !== $('#passwordConfirm').value) { $('#passwordError').textContent = "Those passwords don't match — check and try again"; return; }
         try {
-          const res = await api('/api/me/password', { password: $('#passwordInput').value });
+          const res = await api('/api/me/password', { password: pw });
           setPlayer(res.player);
           toast('Password saved — you can now log in anywhere', 'good');
           renderProfile();
@@ -1390,6 +1410,13 @@
         });
       } else if (act === 'mute') { sfx.toggle(); renderProfile(); }
     }
+  });
+
+  // "Show password" checkboxes flip their fields between hidden and visible text.
+  document.addEventListener('change', (e) => {
+    const t = e.target.closest('[data-showpw]');
+    if (!t) return;
+    t.dataset.showpw.split(',').forEach((sel) => { const el = $(sel); if (el) el.type = t.checked ? 'text' : 'password'; });
   });
 
   $('#hudMenu').addEventListener('click', (e) => { e.stopPropagation(); quitPrompt(); });

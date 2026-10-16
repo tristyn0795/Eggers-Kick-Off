@@ -377,7 +377,7 @@ async function main() {
           let career = null;
           if (round.career) {
             const boss = K.bossById(round.career);
-            const cpu = K.cpuRound(round.baseSeed, boss);
+            const cpu = K.cpuRound(round.baseSeed, boss, round.upgrades);
             const applied = K.applyResult(player.career, boss, round.score, cpu.total);
             player.career = applied.career;
             player.coins += applied.outcome.reward;

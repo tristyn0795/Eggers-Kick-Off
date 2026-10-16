@@ -129,9 +129,9 @@ test('career: bosses unlock in order, wins raise skill, Pro unlocks the Mastery 
   let career = K.newCareer();
   assert.ok(K.isUnlocked(career, 'henry'));
   assert.ok(!K.isUnlocked(career, 'ivy'));
-  const cpu = K.cpuRound(12345, K.bossById('henry'));
+  const cpu = K.cpuRound(12345, K.bossById('henry'), {});
   assert.strictEqual(cpu.kicks.length, 10);
-  assert.deepStrictEqual(K.cpuRound(12345, K.bossById('henry')), cpu, 'boss scores are deterministic');
+  assert.deepStrictEqual(K.cpuRound(12345, K.bossById('henry'), {}), cpu, 'boss scores are deterministic');
   const win = K.applyResult(career, K.bossById('henry'), cpu.total + 1, cpu.total);
   assert.ok(win.outcome.won && win.outcome.firstWin && win.outcome.reward > 0);
   assert.ok(win.career.skill > 0);
@@ -163,4 +163,19 @@ test('economy: steep upgrade curve, per-kick coins, daily streak', () => {
   assert.strictEqual(C.applyDaily(p, day).bonus, 0, 'once per day');
   assert.strictEqual(C.applyDaily(p, day + 86400000).bonus, 100, 'streak day 2');
   assert.strictEqual(C.applyDaily(p, day + 3 * 86400000).bonus, 50, 'streak resets after a missed day');
+});
+
+test('career stays challenging: bosses scale with your upgrades, and every loss costs skill', () => {
+  const K = require('../shared/career');
+  const gear = (L) => ({ boots: L, ball: L, training: L, focus: L, aero: L, luck: L });
+  const mo = K.bossById('mo');
+  assert.strictEqual(K.bossGearLevel(mo, {}), mo.gear, 'new players face the base boss');
+  assert.ok(K.bossGearLevel(mo, gear(30)) > 30, 'a strong boss out-gears a strong player');
+  assert.ok(K.bossGearLevel(K.bossById('henry'), gear(30)) < 30, 'early bosses stay a little behind you');
+  for (const b of K.BOSSES) {
+    for (const skill of [0, 500, 798, 1500, 2400]) assert.ok(K.skillDelta(skill, b, false) < 0, `${b.id} at ${skill}`);
+  }
+  assert.ok(K.skillDelta(798, mo, false) > K.skillDelta(798, K.bossById('henry'), false), 'losing to a weaker boss hurts more');
+  const kicks = K.cpuRound(99, K.bossById('ivy'), gear(5)).kicks;
+  assert.deepStrictEqual(K.cpuKick(99, K.bossById('ivy'), 4, gear(5)), kicks[4], 'kicks can be revealed one at a time');
 });

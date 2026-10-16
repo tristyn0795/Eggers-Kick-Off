@@ -1,6 +1,29 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.4.0',
+    date: '16 Oct 2026',
+    title: 'Tougher Career + password safety 🔒',
+    sections: [
+      {
+        heading: '🏆 Career is a real challenge again',
+        items: [
+          'Bosses now scale with you, like Wii Sports opponents: each one kicks with gear based on your own upgrades, plus their own edge.',
+          'Early bosses stay a step behind you; Pro Tour and Legends bosses out-gear you. Winning comes down to timing, not just upgrades.',
+          'Every loss now costs Skill Level: a little against a stronger boss, a lot against a weaker one. (Losses used to cost nothing against higher-rated bosses.)',
+          'Already PRO? You keep your PRO status and Mastery Pro Ball.',
+        ],
+      },
+      {
+        heading: '🔒 Passwords',
+        items: [
+          'Setting a password now asks you to type it twice, so a typo can never lock you out.',
+          'New "Show password" toggle when setting a password or logging in.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: '16 Oct 2026',
     title: 'Upgrades to level 50 + Prestige ⭐',
