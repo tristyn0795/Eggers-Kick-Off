@@ -77,14 +77,51 @@ test('milestones pay out once and level-ups pay coins', () => {
   assert.strictEqual(C.levelUpBonus(1, 3), C.levelUpCoins(2) + C.levelUpCoins(3));
 });
 
-test('upgrades go to level 10 and the map reaches the Moon Base', () => {
+test('upgrades go to level 50, levels 1-10 unchanged, and the map scales with them', () => {
   const p = C.newProfile();
-  p.coins = 1e6;
-  p.xp = C.xpForLevel(30);
-  for (let i = 0; i < 10; i++) assert.strictEqual(C.applyPurchase(p, 'upgrade:boots'), null);
+  p.coins = 1e8;
+  p.xp = C.xpForLevel(120);
+  for (let i = 0; i < 50; i++) assert.strictEqual(C.applyPurchase(p, 'upgrade:boots'), null, `level ${i + 1}`);
   assert.strictEqual(C.applyPurchase(p, 'upgrade:boots'), 'Already maxed out');
-  assert.ok(P.stats({ boots: 10 }).power > P.stats({ boots: 5 }).power);
-  assert.strictEqual(P.TARGETS[P.TARGETS.length - 1].name, 'Moon Base');
+  // Levels 1-10 keep their old effect and price.
+  assert.strictEqual(P.stats({ boots: 10 }).power, 1.5);
+  assert.strictEqual(C.upgradeCost('boots', 9), 21450);
+  for (let l = 10; l < 50; l++) assert.ok(C.upgradeCost('boots', l) > C.upgradeCost('boots', l - 1));
+  assert.ok(P.stats({ boots: 50 }).power > P.stats({ boots: 10 }).power);
+  const ball = P.stats({ ball: 50 });
+  assert.ok(ball.restitution * ball.friction < 0.9, 'bounces still die out');
+  assert.ok(P.TARGETS.some((t) => t.name === 'Eggers Galaxy HQ'));
+  assert.ok(P.TARGETS[P.TARGETS.length - 1].x <= P.FIELD_LENGTH);
+  const lvl = C.UPGRADE_LEVEL_REQ;
+  assert.strictEqual(lvl.length, 50);
+  assert.strictEqual(lvl[9], 22);
+});
+
+test('long kicks always replay in about ten seconds', () => {
+  for (const n of [500, 5000, 30000, 54000]) assert.ok(P.playbackTicks(n) / 60 < 11, `${n} frames`);
+});
+
+test('prestige: requirement, reset, permanent bonuses and prestige gear', () => {
+  const p = C.newProfile();
+  p.coins = 1e8;
+  p.xp = C.xpForLevel(120);
+  p.owned.push('ball:cw');
+  p.milestones = ['k500'];
+  assert.match(C.applyPrestige(p), /150 total upgrade levels/);
+  for (const u of C.UPGRADES) for (let i = 0; i < 25; i++) C.applyPurchase(p, `upgrade:${u.id}`);
+  assert.strictEqual(C.totalUpgradeLevels(p), 150);
+  const xp = p.xp;
+  assert.strictEqual(C.applyPrestige(p), null);
+  assert.strictEqual(p.prestige, 1);
+  assert.deepStrictEqual(p.upgrades, {});
+  assert.strictEqual(p.coins, C.PRESTIGE_START_COINS);
+  assert.strictEqual(p.xp, xp, 'level kept');
+  assert.ok(p.owned.includes('ball:cw') && p.milestones.includes('k500'), 'gear and milestones kept');
+  assert.ok(C.isOwned(p, 'ball', 'star') && !C.isOwned(p, 'trail', 'aura'));
+  assert.strictEqual(C.awardKick(p, 800).coins, 110, '+10% coins');
+  assert.strictEqual(P.stats({ prestige: 1 }).power, 1.02, '+2% power');
+  assert.strictEqual(C.prestigeRequirement(1), 180);
+  assert.strictEqual(C.prestigeRequirement(20), 300);
 });
 
 test('career: bosses unlock in order, wins raise skill, Pro unlocks the Mastery Pro Ball', () => {

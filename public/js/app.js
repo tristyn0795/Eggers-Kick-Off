@@ -44,6 +44,12 @@
 
   function saveOffline() { local.set('ek_offline', S.offline); }
 
+  /** ⭐ badge for a prestige rank. */
+  function stars(n) {
+    n = n | 0;
+    return n > 0 ? ` <span class="prestige-badge" title="Prestige ${n}">⭐${n}</span>` : '';
+  }
+
   /** Store the latest server profile, and keep its signed backup on this device. */
   function setPlayer(p) {
     S.player = p;
@@ -105,10 +111,12 @@
       this.track(Math.max(0, s.ballX));
     },
     track(x) {
-      const range = Math.min(18000, Math.max(4500, Math.ceil((x + 400) / 1000) * 1000));
+      const range = Math.min(P.FIELD_LENGTH, Math.max(4500, Math.ceil((x + 400) / (x > 20000 ? 10000 : 1000)) * (x > 20000 ? 10000 : 1000)));
       if (range !== this.range) {
         this.range = range;
-        $('#trackMarks').innerHTML = P.TARGETS.filter((t) => t.x <= range).map((t) => (t.office
+        $('#trackMarks').innerHTML = P.TARGETS.filter((t) => t.x <= range && !t.beacon).map((t) => (t.jackpot
+          ? `<span class="mk office" style="left:${(t.x / range) * 100}%" title="${esc(t.name)}">🌌</span>`
+          : t.office
           ? `<span class="mk office" style="left:${(t.x / range) * 100}%" title="${esc(t.name)}">🏢</span>`
           : `<span class="mk" style="left:${(t.x / range) * 100}%;background:${t.color}" title="${esc(t.name)}"></span>`)).join('');
       }
@@ -412,7 +420,7 @@
     const chip = $('#menuProfile');
     if (S.player) {
       const p = S.player;
-      chip.innerHTML = `👤 ${esc(p.name)}${p.career && p.career.pro ? ' <span class="pro-badge">PRO</span>' : ''} · Lv ${p.level} · <span class="coins">🪙 ${fmt(p.coins)}</span>`;
+      chip.innerHTML = `👤 ${esc(p.name)}${stars(p.prestige)}${p.career && p.career.pro ? ' <span class="pro-badge">PRO</span>' : ''} · Lv ${p.level} · <span class="coins">🪙 ${fmt(p.coins)}</span>`;
     } else if (S.online) {
       const o = S.offline;
       chip.innerHTML = `👤 Create your kicker name · <span class="muted">offline Lv ${C.levelFromXp(o.xp)}</span>`;
@@ -556,7 +564,7 @@
     hud.show('play', { vs: boss });
     game.startRound({
       baseSeed,
-      upgrades: prof.upgrades,
+      upgrades: Object.assign({}, prof.upgrades, prof.prestige ? { prestige: prof.prestige | 0 } : {}),
       equipped: prof.equipped,
       kicks,
       submit: (index, frame, sim, pts) => {
@@ -782,6 +790,7 @@
       <li><b>Daily streak:</b> your first round each day pays ${C.DAILY_BONUS_PER_DAY} × your streak (up to ${fmt(C.DAILY_BONUS_PER_DAY * C.DAILY_BONUS_MAX_DAYS)} on day ${C.DAILY_BONUS_MAX_DAYS}+).</li>
       <li><b>Level up:</b> bonus coins every level (${fmt(C.levelUpCoins(2))} at level 2, rising by 25 each level).</li>
       <li><b>Milestones:</b> one-time rewards from ${fmt(Math.min(...C.MILESTONES.map((m) => m.reward)))} to ${fmt(Math.max(...C.MILESTONES.map((m) => m.reward)))} coins (see Locker → Milestones).</li>
+      <li><b>Prestige ⭐:</b> every prestige permanently adds +${Math.round(C.PRESTIGE_COIN_BONUS * 100)}% to all kick coins.</li>
       <li><b>Career:</b> the first win against each boss pays a bounty (up to ${fmt(Math.max(...EKCareer.BOSSES.map((b) => b.reward)))} coins).</li>
     </ul>`;
   }
@@ -915,7 +924,7 @@
     if (S.shopTab === 'upgrades') {
       grid.innerHTML = C.UPGRADES.map((u) => {
         const lv = (prof.upgrades && prof.upgrades[u.id]) | 0;
-        const pips = Array.from({ length: C.MAX_UPGRADE }, (_, i) => `<i class="${i < lv ? 'on' : ''}${i === 4 ? ' gap' : ''}"></i>`).join('');
+        const pips = `<div class="upbar"><div style="width:${(lv / C.MAX_UPGRADE) * 100}%"></div>${[10, 20, 30, 40].map((m) => `<i style="left:${(m / C.MAX_UPGRADE) * 100}%"></i>`).join('')}</div>`;
         let btn;
         if (lv >= C.MAX_UPGRADE) btn = '<button disabled>MAXED</button>';
         else if (level < C.UPGRADE_LEVEL_REQ[lv]) btn = `<button disabled>🔒 Level ${C.UPGRADE_LEVEL_REQ[lv]}</button>`;
@@ -924,8 +933,10 @@
           btn = `<button data-buy="upgrade:${u.id}" ${prof.coins < cost ? 'disabled' : ''}>Upgrade · 🪙 ${fmt(cost)}</button>`;
         }
         return `<div class="item"><div class="top"><span class="icon">${u.icon}</span><div><div class="name">${esc(u.name)}</div><div class="desc">${esc(u.desc)}</div></div></div>
-          <div class="pips">${pips}</div><div class="muted small">Level ${lv} / ${C.MAX_UPGRADE}</div>${btn}</div>`;
+          ${pips}<div class="muted small">Level ${lv} / ${C.MAX_UPGRADE}</div>${btn}</div>`;
       }).join('');
+    } else if (S.shopTab === 'prestige') {
+      grid.innerHTML = prestigeHtml(prof);
     } else if (S.shopTab === 'milestones') {
       const have = new Set(prof.milestones || []);
       const done = C.MILESTONES.filter((m) => have.has(m.id)).length;
@@ -944,6 +955,7 @@
         if (isEq) btn = '<button class="owned" disabled>✓ Equipped</button>';
         else if (owned) btn = `<button class="owned" data-equip="${S.shopTab}:${it.id}">Equip</button>`;
         else if (it.career) btn = '<button disabled>🏆 Go PRO in Career</button>';
+        else if (it.prestige) btn = `<button disabled>⭐ Prestige ${it.prestige}</button>`;
         else if (level < it.level) btn = `<button disabled>🔒 Level ${it.level}</button>`;
         else btn = `<button data-buy="${key}" ${prof.coins < it.cost ? 'disabled' : ''}>Buy · 🪙 ${fmt(it.cost)}</button>`;
         return `<div class="item ${isEq ? 'equipped' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}</div></div>${btn}</div>`;
@@ -954,11 +966,74 @@
   function itemIcon(slot, it) {
     if (slot === 'outfit') return `<span class="icon" style="background:${it.shirt}">${it.pattern === 'gi' ? '🥋' : it.id === 'astro' ? '🧑‍🚀' : it.id === 'suit' ? '👔' : '👕'}</span>`;
     if (slot === 'ball') {
-      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆' };
+      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆', galaxy: '🌌', blackhole: '🕳️', star: '⭐', diamond: '💎' };
       return `<span class="icon" style="background:${it.base}">${icons[it.style] || '⚽'}</span>`;
     }
-    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️' };
+    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️', cosmic: '🌠', aura: '💫', supernova: '💥' };
     return `<span class="icon">${icons[it.id] || '✨'}</span>`;
+  }
+
+  function prestigeHtml(prof) {
+    const rank = prof.prestige | 0;
+    const have = C.totalUpgradeLevels(prof);
+    const need = C.prestigeRequirement(rank);
+    const ready = have >= need && rank < C.MAX_PRESTIGE;
+    const pct = Math.min(100, (have / need) * 100);
+    const nextRewards = [];
+    for (let r = rank + 1; r <= rank + 10 && nextRewards.length < 3; r++) {
+      const items = C.prestigeRewardsAt(r);
+      if (items.length) nextRewards.push(`⭐${r}: ${items.map(esc).join(', ')}`);
+    }
+    const bonus = (r) => `+${Math.round(r * C.PRESTIGE_COIN_BONUS * 100)}% coins · +${Math.round(r * C.PRESTIGE_POWER_BONUS * 100)}% kick power`;
+    return `<div class="prestige-card">
+      <div class="prestige-rank">${rank ? `⭐${rank}` : 'No prestige yet'}</div>
+      <div class="muted">${rank ? `Your permanent bonus: <b>${bonus(rank)}</b>` : 'Prestige to earn permanent bonuses.'}</div>
+      <h3>Next: ⭐${rank + 1}</h3>
+      <div class="pro-bar"><div style="width:${pct}%"></div><span>${fmt(have)} / ${fmt(need)} upgrade levels</span></div>
+      <ul class="howto">
+        <li><b>You gain:</b> ${bonus(rank + 1)} (permanent), ⭐${rank + 1} next to your name, and a ${fmt(C.PRESTIGE_START_COINS * (rank + 1))}-coin starter pack.</li>
+        <li><b>Resets:</b> all upgrades back to level 0, and your coins.</li>
+        <li><b>You keep:</b> your level, outfits, balls & trails, milestones, Career progress and leaderboard records.</li>
+        ${nextRewards.length ? `<li><b>Prestige gear:</b> ${nextRewards.join(' · ')}</li>` : ''}
+      </ul>
+      <button class="btn ${ready ? 'gold' : ''}" data-prestige ${ready ? '' : 'disabled'}>${ready ? `⭐ Prestige to ⭐${rank + 1}` : `Reach ${fmt(need)} total upgrade levels`}</button>
+    </div>`;
+  }
+
+  function confirmPrestige() {
+    const prof = shopProfileObj();
+    const next = (prof.prestige | 0) + 1;
+    modal(`<h2>⭐ Prestige to ⭐${next}?</h2>
+      <p>Your <b>upgrades and coins reset to zero</b>. In return you get a permanent <b>+${Math.round(next * C.PRESTIGE_COIN_BONUS * 100)}% coins</b>
+      and <b>+${Math.round(next * C.PRESTIGE_POWER_BONUS * 100)}% kick power</b>, plus ${fmt(C.PRESTIGE_START_COINS * next)} coins to start the climb.</p>
+      <p class="muted">You keep your level, cosmetics, milestones, Career and records. This can't be undone.</p>
+      <div class="actions"><button class="btn gold" data-modal="yes">⭐ Prestige</button><button class="btn" data-modal="no">Not yet</button></div>`,
+    async (a) => {
+      if (a !== 'yes') { show('shop'); return; }
+      try {
+        let milestones = [];
+        if (S.shopProfile === 'online') {
+          const res = await api('/api/prestige', {});
+          setPlayer(res.player);
+          milestones = res.milestones || [];
+        } else {
+          const err = C.applyPrestige(S.offline);
+          if (err) throw new Error(err);
+          milestones = C.checkMilestones(S.offline, {});
+          saveOffline();
+        }
+        sfx.levelUp();
+        toast(`⭐ Prestige ${next}! The climb begins again — stronger.`, 'good');
+        milestones.forEach((m) => toast(`🏅 ${m.name} +${fmt(m.reward)} 🪙`, 'good'));
+        game.attract(shopProfileObj().equipped);
+        renderMenu();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+      S.shopTab = 'prestige';
+      renderShop();
+      show('shop');
+    });
   }
 
   async function shopAction(kind, key) {
@@ -1020,7 +1095,7 @@
         if (r.roundId && type === 'kick' && r.kickIndex != null) act = `<button data-replay="${esc(r.roundId)}" data-idx="${r.kickIndex}" title="Watch replay">▶ Watch</button>`;
         else if (r.roundId && type !== 'kick' && !me) act = `<button data-challenge="${esc(r.roundId)}" title="Play the same 10 kicks">⚔️ Beat it</button>`;
         const medal = ['🥇', '🥈', '🥉'][i] || i + 1;
-        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}</td></tr>`;
+        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}${stars(r.prestige)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}</td></tr>`;
       }).join('');
     } catch (e) {
       table.innerHTML = `<tr><td class="error">${esc(e.message)}</td></tr>`;
@@ -1272,6 +1347,7 @@
     if (prof) { S.shopProfile = prof.dataset.prof; game.attract(shopProfileObj().equipped); renderShop(); return; }
     const buy = e.target.closest('[data-buy]');
     if (buy) { shopAction('buy', buy.dataset.buy); return; }
+    if (e.target.closest('[data-prestige]')) { confirmPrestige(); return; }
     const eq = e.target.closest('[data-equip]');
     if (eq) { shopAction('equip', eq.dataset.equip); return; }
     const lb = e.target.closest('#lbTabs [data-type]');

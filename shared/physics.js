@@ -20,9 +20,9 @@
   const SWEET_SPOT = 1.6;            // chest / head height
   const BALL_X = 0.55;
   const BASE_SPEED = 95;
-  const MAX_FLIGHT_FRAMES = 60 * 240;
+  const MAX_FLIGHT_FRAMES = 60 * 900;
   const KICKS_PER_ROUND = 10;
-  const FIELD_LENGTH = 40000;
+  const FIELD_LENGTH = 160000;
 
   // Topgolf-style targets on the field. Points are awarded for where the ball
   // comes to rest. The Click Wise Design Office sits at the classic 4,000 m.
@@ -43,8 +43,23 @@
     { x: 12000, name: 'Lighthouse', pts: 1000, color: '#c62828' },
     { x: 13500, name: 'Volcano', pts: 1250, color: '#ff6d00' },
     { x: 15000, name: 'Rocket Launch Pad', pts: 1600, color: '#5e35b1' },
-    { x: 17000, name: 'Moon Base', pts: 2500, color: '#78909c', jackpot: true },
+    { x: 17000, name: 'Moon Base', pts: 2500, color: '#78909c' },
+    { x: 19500, name: 'Desert Oasis', pts: 3000, color: '#f9a825' },
+    { x: 22500, name: 'Pyramids', pts: 3600, color: '#c69c6d' },
+    { x: 26000, name: 'Pirate Cove', pts: 4300, color: '#00897b' },
+    { x: 30000, name: 'Castle', pts: 5200, color: '#7e57c2' },
+    { x: 34000, name: 'Wind Farm', pts: 6200, color: '#26a69a' },
+    { x: 38500, name: 'Glacier', pts: 7400, color: '#4fc3f7' },
+    { x: 43000, name: 'Stadium', pts: 9000, color: '#e53935' },
+    { x: 48000, name: 'Space Elevator', pts: 11000, color: '#3949ab' },
+    { x: 54000, name: 'Mars Colony', pts: 13500, color: '#d84315' },
+    { x: 60000, name: 'Black Hole', pts: 17000, color: '#4a148c' },
+    { x: 68000, name: 'Eggers Galaxy HQ', pts: 25000, color: '#047dc3', jackpot: true },
   ];
+  // Beyond the Galaxy HQ the field keeps going: a Frontier Beacon every 8 km, each worth more.
+  for (let i = 1, x = 76000; x <= 152000; i++, x += 8000) {
+    TARGETS.push({ x, name: `Frontier Beacon ${i}`, pts: 25000 + 3000 * i, color: '#00bfa5', beacon: true });
+  }
   const RINGS = [
     { name: 'BULLSEYE', mult: 3 },
     { name: 'INNER RING', mult: 2 },
@@ -78,31 +93,36 @@
     return hashSeed(baseSeed >>> 0, index | 0);
   }
 
-  const MAX_UPGRADE_LEVEL = 10;
+  const MAX_UPGRADE_LEVEL = 50;
 
   function clampLevel(v) {
     v = v | 0;
     return v < 0 ? 0 : v > MAX_UPGRADE_LEVEL ? MAX_UPGRADE_LEVEL : v;
   }
 
-  // Levels 1-5 give the full step `a`; levels 6-10 give the smaller step `b`.
-  function tiered(level, a, b) {
-    return (level < 5 ? level : 5) * a + (level > 5 ? level - 5 : 0) * b;
+  // Levels 1-5 give the full step `a`, 6-10 the smaller step `b`, and 11-50 the
+  // small, steady step `c` — so every level still helps but nothing runs away.
+  function tiered(level, a, b, c) {
+    return (level < 5 ? level : 5) * a
+      + (level > 5 ? (level < 10 ? level : 10) - 5 : 0) * b
+      + (level > 10 ? level - 10 : 0) * (c || 0);
   }
 
   function stats(upgrades) {
     const u = upgrades || {};
     const lv = (k) => clampLevel(u[k]);
+    // Each prestige adds a permanent 2% kick power on top of upgrades.
+    const prestige = Math.max(0, Math.min(99, u.prestige | 0));
     return {
-      power: 1 + tiered(lv('boots'), 0.06, 0.04),
-      sweetWidth: 0.3 * (1 + tiered(lv('training'), 0.15, 0.08)),
+      power: (1 + tiered(lv('boots'), 0.06, 0.04, 0.012)) * (1 + 0.02 * prestige),
+      sweetWidth: 0.3 * (1 + tiered(lv('training'), 0.15, 0.08, 0.008)),
       reach: 2.5,
-      restitution: 0.55 + tiered(lv('ball'), 0.04, 0.01),
-      friction: 0.82 + tiered(lv('ball'), 0.02, 0.004),
-      roll: 5 - tiered(lv('ball'), 0.5, 0.15),
+      restitution: 0.55 + tiered(lv('ball'), 0.04, 0.01, 0.0015),
+      friction: 0.82 + tiered(lv('ball'), 0.02, 0.004, 0.0006),
+      roll: Math.max(0.8, 5 - tiered(lv('ball'), 0.5, 0.15, 0.02)),
       luck: lv('luck'),
-      juggleG: 22 * (1 - tiered(lv('focus'), 0.07, 0.03)),
-      drag: 0.008 * (1 - tiered(lv('aero'), 0.12, 0.05)),
+      juggleG: 22 * (1 - tiered(lv('focus'), 0.07, 0.03, 0.004)),
+      drag: 0.008 * (1 - tiered(lv('aero'), 0.12, 0.05, 0.002)),
     };
   }
 
@@ -114,8 +134,8 @@
   function fieldObjects(seed, luck) {
     const r = mulberry32(hashSeed(seed, 0xF1E1D));
     const out = [];
-    const pPad = 0.22 + tiered(luck | 0, 0.04, 0.015);
-    const pPuddle = 0.18 - tiered(luck | 0, 0.025, 0.008);
+    const pPad = 0.22 + tiered(luck | 0, 0.04, 0.015, 0.003);
+    const pPuddle = Math.max(0.003, 0.18 - tiered(luck | 0, 0.025, 0.008, 0.0003));
     let x = 120 + r() * 120;
     while (x < FIELD_LENGTH) {
       const roll = r();
@@ -354,8 +374,25 @@
     return result;
   }
 
+  /**
+   * How many path frames to advance per 60 Hz tick when replaying a kick. Long kicks
+   * speed up so even a 40 km boot plays out in roughly ten seconds.
+   */
+  function playbackSpeed(pathPos, totalFrames, fast) {
+    if (fast) return Math.max(9, totalFrames / (60 * 2.5));
+    if (pathPos < 25) return 1;
+    if (pathPos < 70) return 2;
+    return Math.max(3.2, totalFrames / (60 * 9));
+  }
+
+  /** Ticks (at 60 Hz) a kick takes to play back without fast-forward, swing included. */
+  function playbackTicks(totalFrames) {
+    return SWING_FRAMES + Math.min(25, totalFrames) + Math.min(45, Math.max(0, totalFrames - 25)) / 2
+      + Math.max(0, totalFrames - 70) / Math.max(3.2, totalFrames / (60 * 9));
+  }
+
   return {
-    DT, G, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
+    DT, G, playbackSpeed, playbackTicks, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
     KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,

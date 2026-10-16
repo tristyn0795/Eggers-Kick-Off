@@ -9,8 +9,11 @@
   // first few come quickly and levels 6-10 are a long grind.
   const UPGRADE_BASE = 250;
   const UPGRADE_GROWTH = 1.6;
+  const UPGRADE_LATE_GROWTH = 1.035; // from level 10 on, each level costs 3.5% more than the last
+  const MAX_UPGRADE = 50;
+  // Player level needed to buy upgrade level i+1. Levels 1-10 unchanged; then +2 player levels per upgrade level.
   const UPGRADE_LEVEL_REQ = [1, 2, 3, 5, 7, 9, 12, 15, 18, 22];
-  const MAX_UPGRADE = UPGRADE_LEVEL_REQ.length;
+  while (UPGRADE_LEVEL_REQ.length < MAX_UPGRADE) UPGRADE_LEVEL_REQ.push(UPGRADE_LEVEL_REQ[UPGRADE_LEVEL_REQ.length - 1] + 2);
 
   const UPGRADES = [
     { id: 'boots', name: 'Power Boots', icon: '👟', price: 1.25, desc: 'More kick power: +6% per level, +4% from level 6.' },
@@ -24,8 +27,11 @@
   /** Coins to buy the upgrade's next level when it's currently at `level`. */
   function upgradeCost(id, level) {
     const up = UPGRADES.find((u) => u.id === id);
-    const raw = UPGRADE_BASE * (up ? up.price : 1) * Math.pow(UPGRADE_GROWTH, level);
-    return raw < 1000 ? Math.round(raw / 10) * 10 : Math.round(raw / 50) * 50;
+    const early = Math.min(level, 9);
+    const raw = UPGRADE_BASE * (up ? up.price : 1) * Math.pow(UPGRADE_GROWTH, early)
+      * Math.pow(UPGRADE_LATE_GROWTH, Math.max(0, level - 9));
+    if (raw < 1000) return Math.round(raw / 10) * 10;
+    return level < 10 ? Math.round(raw / 50) * 50 : Math.round(raw / 100) * 100;
   }
 
   const OUTFITS = [
@@ -44,6 +50,9 @@
     { id: 'tux', name: 'Award Night Tux', cost: 30000, level: 19, shirt: '#0d0d0d', shorts: '#0d0d0d', socks: '#0d0d0d', pattern: 'suit', alt: '#ffffff', tie: '#0d0d0d', pants: true, longSleeves: true, shoe: '#000000' },
     { id: 'coralbelt', name: 'Coral Belt Master', cost: 40000, level: 21, shirt: '#f4f4f2', shorts: '#f4f4f2', socks: '#f4f4f2', pattern: 'gi', belt: '#d32f2f', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
     { id: 'ceo', name: 'Click Wise CEO', cost: 55000, level: 23, shirt: '#047dc3', shorts: '#0b2f4a', socks: '#0b2f4a', pattern: 'suit', alt: '#ffffff', tie: '#4caf50', pants: true, longSleeves: true, shoe: '#111111' },
+    { id: 'platinumgi', name: 'Platinum Gi', cost: 0, level: 1, prestige: 3, shirt: '#e5e4e2', shorts: '#e5e4e2', socks: '#e5e4e2', pattern: 'gi', belt: '#7e57c2', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
+    { id: 'legendgi', name: 'Eggers Legend Gi', cost: 400000, level: 50, shirt: '#ffd54f', shorts: '#ffd54f', socks: '#ffd54f', pattern: 'gi', belt: '#111111', beltTip: '#c62828', medal: 'gold', pants: true, longSleeves: true, sandals: true },
+    { id: 'cosmicsuit', name: 'Cosmic Suit', cost: 2000000, level: 100, shirt: '#311b92', shorts: '#1a237e', socks: '#1a237e', pattern: 'suit', alt: '#b388ff', tie: '#ffd54f', pants: true, longSleeves: true, shoe: '#000000' },
   ];
 
   const BALLS = [
@@ -58,6 +67,10 @@
     { id: 'planet', name: 'Planet Kick', cost: 50000, level: 24, base: '#ffb74d', patch: '#8d6e63', style: 'planet' },
     { id: 'mastery', name: 'Mastery Pro Ball', cost: 0, level: 1, base: '#0b2f6b', patch: '#ffd54f', style: 'mastery', career: true },
     { id: 'moon', name: 'Moon Ball', cost: 100000, level: 30, base: '#e0e0e0', patch: '#9e9e9e', style: 'moon' },
+    { id: 'star', name: 'Prestige Star Ball', cost: 0, level: 1, prestige: 1, base: '#fffdf5', patch: '#ffc107', style: 'star' },
+    { id: 'diamond', name: 'Diamond Ball', cost: 0, level: 1, prestige: 5, base: '#b2ebf2', patch: '#ffffff', style: 'diamond' },
+    { id: 'galaxy', name: 'Galaxy Ball', cost: 250000, level: 40, base: '#1a0b3d', patch: '#b388ff', style: 'galaxy' },
+    { id: 'blackhole', name: 'Black Hole Ball', cost: 1000000, level: 80, base: '#000000', patch: '#ff9100', style: 'blackhole' },
   ];
 
   const TRAILS = [
@@ -70,6 +83,9 @@
     { id: 'stars', name: 'Shooting Stars', cost: 22000, level: 17 },
     { id: 'confetti', name: 'Party Confetti', cost: 35000, level: 20 },
     { id: 'comet', name: 'Comet Tail', cost: 60000, level: 25 },
+    { id: 'aura', name: 'Prestige Aura', cost: 0, level: 1, prestige: 2 },
+    { id: 'supernova', name: 'Supernova', cost: 0, level: 1, prestige: 10 },
+    { id: 'cosmic', name: 'Cosmic Dust', cost: 500000, level: 60 },
   ];
 
   // One-time rewards. Checked after every kick and every round.
@@ -84,6 +100,18 @@
     { id: 'k10000', name: 'Ten-K Legend', desc: 'Kick 10,000 m', reward: 4000, kick: 10000 },
     { id: 'k13000', name: 'Volcano Vaulter', desc: 'Kick 13,000 m', reward: 6000, kick: 13000 },
     { id: 'k17000', name: 'Moonshot', desc: 'Kick 17,000 m to the Moon Base', reward: 10000, kick: 17000 },
+    { id: 'k25000', name: 'Oasis Express', desc: 'Kick 25,000 m', reward: 15000, kick: 25000 },
+    { id: 'k35000', name: 'Castle Crusher', desc: 'Kick 35,000 m', reward: 25000, kick: 35000 },
+    { id: 'k45000', name: 'Stadium Sender', desc: 'Kick 45,000 m', reward: 40000, kick: 45000 },
+    { id: 'k60000', name: 'Event Horizon', desc: 'Kick 60,000 m to the Black Hole', reward: 75000, kick: 60000 },
+    { id: 'k68000', name: 'Galaxy Brain', desc: 'Kick 68,000 m to the Eggers Galaxy HQ', reward: 120000, kick: 68000 },
+    { id: 'up25', name: 'Halfway Hero', desc: 'Get any upgrade to level 25', reward: 20000, upgrade: 25 },
+    { id: 'up50', name: 'Maxed Out', desc: 'Get any upgrade to level 50', reward: 150000, upgrade: 50 },
+    { id: 'r50000', name: 'Galactic Round', desc: 'Score 50,000 in one round', reward: 20000, round: 50000 },
+    { id: 'r100000', name: 'Cosmic Round', desc: 'Score 100,000 in one round', reward: 60000, round: 100000 },
+    { id: 'pr1', name: 'Born Again', desc: 'Prestige for the first time', reward: 5000, prestige: 1 },
+    { id: 'pr5', name: 'Five Star Kicker', desc: 'Reach prestige 5', reward: 50000, prestige: 5 },
+    { id: 'pr10', name: 'Prestige Legend', desc: 'Reach prestige 10', reward: 200000, prestige: 10 },
     { id: 'perfect', name: 'Perfect Strike', desc: 'Land a PERFECT kick', reward: 150, label: 'PERFECT!' },
     { id: 'target', name: 'On Target', desc: 'Stop the ball in any target', reward: 100, anyTarget: true },
     { id: 'henry', name: "Henry's Friend", desc: 'Stop the ball in the Duck Pond', reward: 250, target: 'Duck Pond' },
@@ -108,6 +136,7 @@
     const item = (SLOTS[slot] || []).find((i) => i.id === id);
     if (!item) return false;
     if (item.career) return !!(profile.career && profile.career.pro);
+    if (item.prestige) return (profile.prestige | 0) >= item.prestige;
     return item.cost === 0 || (profile.owned || []).includes(`${slot}:${id}`);
   }
 
@@ -140,7 +169,8 @@
    */
   function awardKick(profile, points, opts) {
     opts = opts || {};
-    const coins = opts.freeKick ? Math.floor(Math.max(0, points) / FREE_KICK_POINTS_PER_COIN) : coinsForKick(points);
+    const baseCoins = opts.freeKick ? Math.floor(Math.max(0, points) / FREE_KICK_POINTS_PER_COIN) : coinsForKick(points);
+    const coins = Math.floor(baseCoins * prestigeCoinMult(profile.prestige));
     const xp = opts.freeKick ? Math.floor(points / 2) : points;
     const levelBefore = levelFromXp(profile.xp);
     profile.xp += xp;
@@ -188,6 +218,8 @@
       if (have.has(m.id)) continue;
       let ok = false;
       if (m.kick) ok = (profile.bestKick || 0) >= m.kick;
+      else if (m.prestige) ok = (profile.prestige | 0) >= m.prestige;
+      else if (m.upgrade) ok = Object.values(profile.upgrades || {}).some((v) => (v | 0) >= m.upgrade);
       else if (m.round) ok = (profile.bestRound || 0) >= m.round || (ev.roundScore || 0) >= m.round;
       else if (m.rounds) ok = (profile.roundsPlayed || 0) >= m.rounds;
       else if (ev.kick) {
@@ -221,6 +253,40 @@
     }
     return null;
   }
+  // ---- Prestige ------------------------------------------------------------
+  // Reset upgrades and coins for permanent bonuses. Level, cosmetics, milestones,
+  // career and records are kept.
+  const PRESTIGE_BASE_REQ = 150;      // total upgrade levels needed for the first prestige
+  const PRESTIGE_REQ_STEP = 30;       // ...and this many more for each one after
+  const PRESTIGE_COIN_BONUS = 0.1;    // +10% coins per prestige
+  const PRESTIGE_POWER_BONUS = 0.02;  // +2% kick power per prestige (applied in physics)
+  const PRESTIGE_START_COINS = 1000;  // starter coins × new prestige rank
+  const MAX_PRESTIGE = 99;
+
+  function totalUpgradeLevels(profile) {
+    return UPGRADES.reduce((n, u) => n + ((profile.upgrades && profile.upgrades[u.id]) | 0), 0);
+  }
+  function prestigeRequirement(prestige) {
+    return Math.min(MAX_UPGRADE * UPGRADES.length, PRESTIGE_BASE_REQ + PRESTIGE_REQ_STEP * (prestige | 0));
+  }
+  function prestigeCoinMult(prestige) {
+    return 1 + PRESTIGE_COIN_BONUS * Math.max(0, Math.min(MAX_PRESTIGE, prestige | 0));
+  }
+  function prestigeRewardsAt(rank) {
+    return Object.entries(SLOTS).flatMap(([, list]) => list.filter((i) => i.prestige === rank).map((i) => i.name));
+  }
+  /** Prestige the profile. Returns an error string, or null on success. */
+  function applyPrestige(profile) {
+    const rank = profile.prestige | 0;
+    if (rank >= MAX_PRESTIGE) return 'You have reached the maximum prestige';
+    const need = prestigeRequirement(rank);
+    if (totalUpgradeLevels(profile) < need) return `You need ${need} total upgrade levels to prestige`;
+    profile.prestige = rank + 1;
+    profile.upgrades = {};
+    profile.coins = PRESTIGE_START_COINS * profile.prestige;
+    return null;
+  }
+
   /** Validate and apply a purchase to a profile object. Returns an error string or null. */
   function applyPurchase(profile, itemKey) {
     const level = levelFromXp(profile.xp);
@@ -244,6 +310,7 @@
     const key = `${kind}:${id}`;
     if (isOwned(profile, kind, id)) return 'Already owned';
     if (item.career) return 'Earn this by going Pro in Career mode';
+    if (item.prestige) return `Reach prestige ⭐${item.prestige} to unlock this`;
     if (level < item.level) return `Reach level ${item.level} first`;
     if (profile.coins < item.cost) return 'Not enough coins';
     profile.coins -= item.cost;
@@ -271,6 +338,7 @@
       roundsPlayed: 0,
       milestones: [],
       daily: {},
+      prestige: 0,
     };
   }
 
@@ -279,7 +347,9 @@
     DEFAULT_EQUIPPED, DEFAULT_OWNED, isOwned,
     ROUND_COMPLETION_COINS, POINTS_PER_COIN, FREE_KICK_POINTS_PER_COIN, DAILY_BONUS_PER_DAY, DAILY_BONUS_MAX_DAYS,
     levelFromXp, xpForLevel, coinsForKick, coinsForRound, levelUpCoins, levelUpBonus,
-    awardKick, applyDaily, checkMilestones, nextUnlocks, upgradeCost,
+    awardKick, applyDaily, checkMilestones, nextUnlocks, upgradeCost, UPGRADE_LATE_GROWTH,
+    PRESTIGE_BASE_REQ, PRESTIGE_REQ_STEP, PRESTIGE_COIN_BONUS, PRESTIGE_POWER_BONUS, PRESTIGE_START_COINS, MAX_PRESTIGE,
+    totalUpgradeLevels, prestigeRequirement, prestigeCoinMult, prestigeRewardsAt, applyPrestige,
     applyPurchase, applyEquip, newProfile,
   };
 });

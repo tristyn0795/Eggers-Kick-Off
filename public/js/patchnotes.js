@@ -1,6 +1,45 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.3.0',
+    date: '16 Oct 2026',
+    title: 'Upgrades to level 50 + Prestige ⭐',
+    sections: [
+      {
+        heading: '📈 Upgrades go to level 50',
+        items: [
+          'Every upgrade now goes all the way to level 50 (was 10). Levels 1–10 work and cost exactly what they did before.',
+          'Levels 11–50 keep adding power, bounce, sweet spot, slow-mo, aero and luck, so your kicks keep getting longer.',
+          'Each level from 11 up costs 3.5% more than the last. Taking everything to 50 is the ultimate grind.',
+        ],
+      },
+      {
+        heading: '⭐ New: Prestige',
+        items: [
+          'Hit 150 total upgrade levels to Prestige: your upgrades and coins reset, but you keep your level, gear, milestones, Career and records.',
+          'Every prestige gives a permanent +10% coins and +2% kick power, a ⭐ next to your name, and a coin starter pack.',
+          'Prestige-only gear: Star Ball (⭐1), Prestige Aura (⭐2), Platinum Gi (⭐3), Diamond Ball (⭐5), Supernova trail (⭐10).',
+          'Each prestige needs 30 more upgrade levels than the last. From ⭐5 on, you need everything maxed.',
+        ],
+      },
+      {
+        heading: '🗺️ The map goes to 68 km… and beyond',
+        items: [
+          'New targets: Desert Oasis, Pyramids, Pirate Cove, Castle, Wind Farm, Glacier, Stadium, Space Elevator, Mars Colony, Black Hole and the Eggers Galaxy HQ jackpot (25,000 pts).',
+          'Past the Galaxy HQ, a Frontier Beacon every 8 km, each worth more than the last.',
+          'Long kicks now replay faster, so even a 40 km boot plays out in about 10 seconds.',
+        ],
+      },
+      {
+        heading: '🎁 New rewards',
+        items: [
+          'New prestige-level gear: Galaxy Ball (level 40), Eggers Legend Gi (level 50), Cosmic Dust trail (level 60), Black Hole Ball (level 80) and the Cosmic Suit (level 100).',
+          '11 new milestones for huge kicks, huge rounds, maxing upgrades and prestiging.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.0',
     date: '16 Oct 2026',
     title: 'Your progress is safe + the economy rework 🪙',

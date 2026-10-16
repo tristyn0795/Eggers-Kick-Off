@@ -259,8 +259,7 @@
       const n = path.length / 2;
       k.followT++;
       // Real-time for the strike, then speed up so long kicks don't drag on.
-      let speed = k.pathPos < 25 ? 1 : k.pathPos < 70 ? 2 : 3.2;
-      if (this.fast) speed = 9;
+      const speed = P.playbackSpeed(k.pathPos, n, this.fast);
       const prev = k.pathPos;
       k.pathPos = Math.min(n, k.pathPos + speed);
       const ev = k.sim.events;
@@ -424,7 +423,7 @@
       if (inAir) {
         // Pull out as the ball climbs; when it lands, keep enough field in view to see the targets.
         const maxAir = k.sim.whiff ? js : Math.min(js, Math.max(4, r.W / 230));
-        targetScale = clamp((r.groundY - 110) / (ball.y + 3), 1.3, maxAir);
+        targetScale = clamp((r.groundY - 110) / (ball.y + 3), 0.2, maxAir);
         const lookAhead = Math.min(1, (k.sim.launchSpeed || 0) / 60);
         targetAnchor = 0.42 - 0.12 * lookAhead;
       }

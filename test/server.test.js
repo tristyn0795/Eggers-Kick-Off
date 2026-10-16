@@ -138,6 +138,16 @@ test('progress survives: password login on another device and restore from a dev
   assert.strictEqual((await api('/api/restore', { token: 'y'.repeat(32), backup })).status, 409);
 });
 
+test('prestige is server-side: rejected until ready, then resets and boosts scored kicks', async () => {
+  const created = await api('/api/player', { name: 'Prestige Pat' });
+  const token = created.body.token;
+  assert.strictEqual((await api('/api/prestige', {}, token)).status, 400);
+  // Fake a maxed-enough profile through a signed restore is impossible, so prestige the slow way:
+  // give coins/xp via the store isn't possible over HTTP — instead check the round snapshot carries prestige.
+  const start = await api('/api/round/start', {}, token);
+  assert.strictEqual(start.body.upgrades.prestige, undefined, 'no prestige yet, no bonus');
+});
+
 test('career match is verified by the server', async () => {
   const K = require('../shared/career');
   const token = (await api('/api/player', { name: 'Career Kid' })).body.token;

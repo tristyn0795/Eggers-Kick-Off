@@ -71,6 +71,7 @@ class PgStore {
       ALTER TABLE rounds ADD COLUMN IF NOT EXISTS career TEXT;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS password_hash TEXT;
       ALTER TABLE players ADD COLUMN IF NOT EXISTS daily JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS prestige INTEGER NOT NULL DEFAULT 0;
       CREATE TABLE IF NOT EXISTS player_tokens (
         token_hash TEXT PRIMARY KEY,
         player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -102,6 +103,7 @@ class PgStore {
       career: r.career || {},
       passwordHash: r.password_hash || null,
       daily: r.daily || {},
+      prestige: r.prestige || 0,
     };
   }
 
@@ -176,12 +178,12 @@ class PgStore {
       await this.pool.query(
         `UPDATE players SET name=$2, name_key=$3, coins=$4, xp=$5, upgrades=$6, owned=$7, equipped=$8,
            best_round=$9, best_round_id=$10, best_kick=$11, best_kick_round_id=$12, best_kick_index=$13,
-           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18
+           rounds_played=$14, milestones=$15, career=$16, password_hash=$17, daily=$18, prestige=$19
          WHERE id=$1`,
         [p.id, p.name, p.nameKey, p.coins, p.xp, JSON.stringify(p.upgrades), JSON.stringify(p.owned),
           JSON.stringify(p.equipped), p.bestRound, p.bestRoundId, p.bestKick, p.bestKickRoundId,
           p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {}),
-          p.passwordHash || null, JSON.stringify(p.daily || {})]
+          p.passwordHash || null, JSON.stringify(p.daily || {}), p.prestige | 0]
       );
     } catch (e) {
       if (e.code === '23505') throw new NameTakenError();
@@ -215,11 +217,11 @@ class PgStore {
     let rows;
     if (type === 'kick') {
       ({ rows } = await this.pool.query(
-        `SELECT id, name, best_kick AS value, best_kick_round_id AS round_id, best_kick_index AS kick_index, xp
+        `SELECT id, name, best_kick AS value, best_kick_round_id AS round_id, best_kick_index AS kick_index, xp, prestige
          FROM players WHERE best_kick > 0 ORDER BY best_kick DESC, created_at ASC LIMIT $1`, [limit]));
     } else if (type === 'week') {
       ({ rows } = await this.pool.query(
-        `SELECT p.id, p.name, b.score AS value, b.id AS round_id, NULL AS kick_index, p.xp FROM (
+        `SELECT p.id, p.name, b.score AS value, b.id AS round_id, NULL AS kick_index, p.xp, p.prestige FROM (
            SELECT DISTINCT ON (player_id) id, player_id, score FROM rounds
            WHERE finished AND finished_at > now() - interval '7 days'
            ORDER BY player_id, score DESC, finished_at ASC
@@ -227,12 +229,12 @@ class PgStore {
          ORDER BY b.score DESC LIMIT $1`, [limit]));
     } else {
       ({ rows } = await this.pool.query(
-        `SELECT id, name, best_round AS value, best_round_id AS round_id, NULL AS kick_index, xp
+        `SELECT id, name, best_round AS value, best_round_id AS round_id, NULL AS kick_index, xp, prestige
          FROM players WHERE best_round > 0 ORDER BY best_round DESC, created_at ASC LIMIT $1`, [limit]));
     }
     return rows.map((r) => ({
       playerId: r.id, name: r.name, value: Number(r.value), roundId: r.round_id,
-      kickIndex: r.kick_index, xp: r.xp,
+      kickIndex: r.kick_index, xp: r.xp, prestige: r.prestige || 0,
     }));
   }
 
@@ -391,7 +393,7 @@ class FileStore {
     if (type === 'kick') {
       rows = players.filter((p) => p.bestKick > 0)
         .sort((a, b) => b.bestKick - a.bestKick || a.createdAt - b.createdAt)
-        .map((p) => ({ playerId: p.id, name: p.name, value: p.bestKick, roundId: p.bestKickRoundId, kickIndex: p.bestKickIndex, xp: p.xp }));
+        .map((p) => ({ playerId: p.id, name: p.name, value: p.bestKick, roundId: p.bestKickRoundId, kickIndex: p.bestKickIndex, xp: p.xp, prestige: p.prestige || 0 }));
     } else if (type === 'week') {
       const cutoff = Date.now() - WEEK_MS;
       const best = new Map();
@@ -402,12 +404,12 @@ class FileStore {
       }
       rows = [...best.values()].sort((a, b) => b.score - a.score).map((r) => {
         const p = this.data.players[r.playerId];
-        return { playerId: p.id, name: p.name, value: r.score, roundId: r.id, kickIndex: null, xp: p.xp };
+        return { playerId: p.id, name: p.name, value: r.score, roundId: r.id, kickIndex: null, xp: p.xp, prestige: p.prestige || 0 };
       });
     } else {
       rows = players.filter((p) => p.bestRound > 0)
         .sort((a, b) => b.bestRound - a.bestRound || a.createdAt - b.createdAt)
-        .map((p) => ({ playerId: p.id, name: p.name, value: p.bestRound, roundId: p.bestRoundId, kickIndex: null, xp: p.xp }));
+        .map((p) => ({ playerId: p.id, name: p.name, value: p.bestRound, roundId: p.bestRoundId, kickIndex: null, xp: p.xp, prestige: p.prestige || 0 }));
     }
     return rows.slice(0, limit);
   }

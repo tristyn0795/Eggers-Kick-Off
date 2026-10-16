@@ -46,7 +46,7 @@ function signBackup(p) {
   const data = {
     v: 1, id: p.id, name: p.name, coins: p.coins, xp: p.xp, upgrades: p.upgrades, owned: p.owned,
     equipped: p.equipped, bestRound: p.bestRound, bestKick: p.bestKick, roundsPlayed: p.roundsPlayed,
-    milestones: p.milestones || [], career: p.career || {}, daily: p.daily || {}, t: Date.now(),
+    milestones: p.milestones || [], career: p.career || {}, daily: p.daily || {}, prestige: p.prestige | 0, t: Date.now(),
   };
   const body = Buffer.from(JSON.stringify(data)).toString('base64url');
   const sig = crypto.createHmac('sha256', BACKUP_SECRET).update(body).digest('base64url');
@@ -95,6 +95,7 @@ function publicPlayer(p) {
     career: K.normalize(p.career),
     daily: p.daily || {},
     hasPassword: !!p.passwordHash,
+    prestige: p.prestige | 0,
     backup: signBackup(p),
   };
 }
@@ -201,6 +202,7 @@ async function main() {
       coins: data.coins | 0, xp: data.xp | 0, upgrades: data.upgrades || {}, owned: data.owned || base.owned,
       equipped: data.equipped || base.equipped, bestRound: data.bestRound | 0, bestKick: Number(data.bestKick) || 0,
       roundsPlayed: data.roundsPlayed | 0, milestones: data.milestones || [], career: data.career || {}, daily: data.daily || {},
+      prestige: data.prestige | 0,
     });
     await store.savePlayer(p);
     console.log(`Restored profile ${p.id} (${p.name}) from a device backup`);
@@ -262,6 +264,16 @@ async function main() {
     return { player: publicPlayer(p) };
   })));
 
+  app.post('/api/prestige', auth, wrap(async (req) => withLock('p:' + req.player.id, async () => {
+    const p = await store.getPlayer(req.player.id);
+    const err = C.applyPrestige(p);
+    if (err) throw new HttpError(400, err);
+    const milestones = C.checkMilestones(p, {});
+    await store.savePlayer(p);
+    console.log(`${p.name} reached prestige ${p.prestige}`);
+    return { player: publicPlayer(p), milestones };
+  })));
+
   app.post('/api/shop/equip', auth, wrap(async (req) => withLock('p:' + req.player.id, async () => {
     const p = await store.getPlayer(req.player.id);
     const err = C.applyEquip(p, req.body && req.body.slot, req.body && req.body.id);
@@ -286,7 +298,8 @@ async function main() {
       id: newId(),
       playerId: player.id,
       baseSeed: seed == null ? newSeed() : seed,
-      upgrades: fair ? {} : Object.assign({}, player.upgrades),
+      // Snapshot the kicker's gear for this round; prestige adds permanent power in the physics.
+      upgrades: fair ? {} : Object.assign({}, player.upgrades, player.prestige ? { prestige: player.prestige | 0 } : {}),
       kicks: [],
       score: 0,
       finished: false,
@@ -396,8 +409,7 @@ async function main() {
     const { round, player, result, points, done, summary, newBestKick, milestones, award } = out;
     // Hold the news back until the kick has finished playing on the kicker's screen,
     // so nobody (the kicker included) sees a result while the ball is still flying.
-    const ticks = P.SWING_FRAMES + Math.min(25, result.flightFrames) + Math.min(45, Math.max(0, result.flightFrames - 25)) / 2
-      + Math.max(0, result.flightFrames - 70) / 3.2;
+    const ticks = P.playbackTicks(result.flightFrames);
     const revealMs = Math.min(30000, Math.round((ticks / 60) * 1000) + 300);
     setTimeout(() => {
       if (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office))) {

@@ -19,7 +19,9 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 - Stop the ball inside a target for bonus points: outer ring ×1, inner ×2, **bullseye ×3**.
   Targets: Coffee Cup (150 m), Car Park, Duck Pond (home of **Henry** 🪿), Water Tower, Pizza Shack, Billboard,
   Gas Station, **Click Wise Design Office (4,000 m, 250 pts)**, Downtown, Airport, Mountain Peak, Ski Lodge,
-  Satellite Dish, Lighthouse, Volcano, Rocket Launch Pad and the **Moon Base jackpot (17 km, 2,500 pts)**.
+  Satellite Dish, Lighthouse, Volcano, Rocket Launch Pad, Moon Base, then Desert Oasis → Pyramids → Pirate Cove →
+  Castle → Wind Farm → Glacier → Stadium → Space Elevator → Mars Colony → Black Hole → **Eggers Galaxy HQ (68 km,
+  25,000 pts)**, then a Frontier Beacon every 8 km out to 152 km. Long kicks replay in ~10 seconds.
   The map is spaced to match what each upgrade tier can reach.
 - A round is 10 kicks, and the **last ball scores double**.
 
@@ -29,8 +31,11 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 - Prices are built for a long grind: each upgrade level costs 1.6× the last (maxing everything ≈ 284k coins) and
   cosmetics run up to 100k.
 - Every round's points also count as **XP**. Something new unlocks at almost every level up to 30.
-- **Upgrades** (10 levels each, levels 6–10 are long-haul goals): Power Boots, Pro Ball, Sweet Spot Training,
-  Slow-Mo Focus, Aero Laces, Lucky Socks.
+- **Upgrades** go to **level 50**: Power Boots, Pro Ball, Sweet Spot Training, Slow-Mo Focus, Aero Laces, Lucky Socks.
+  Levels 1–10 cost 1.6× per level; from 11 on each level costs 3.5% more (all six to 50 ≈ 9.7M coins).
+- **Prestige ⭐:** at 150 total upgrade levels (+30 per prestige, capped at all-maxed) players can reset upgrades and
+  coins for a permanent +10% coins and +2% kick power per prestige, a ⭐ by their name and prestige-only gear.
+  Level, cosmetics, milestones, Career and records are kept. Prestige power is applied server-side.
 - **Cosmetics:** outfits (Jason's black gi is the default, plus the white competition gi, the
   Black Belt Promotion, the Click Wise tee/polo, suit, Hawaiian, astronaut…), balls (including the Eggers
   Egg) and trails.
