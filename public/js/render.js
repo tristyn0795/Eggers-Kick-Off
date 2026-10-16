@@ -42,21 +42,42 @@
       this.resize();
     }
 
+    /**
+     * Size the backing store. `quality` (0.5-1) is lowered automatically on slow
+     * devices so the game stays smooth; it multiplies the device pixel ratio.
+     */
     resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = this.canvas.clientWidth || window.innerWidth;
       const h = this.canvas.clientHeight || window.innerHeight;
+      if (this.quality == null) this.quality = 1;
+      const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.max(0.75, maxDpr * this.quality);
+      const bw = Math.round(w * dpr), bh = Math.round(h * dpr);
+      if (bw === this.canvas.width && bh === this.canvas.height && w === this.W && h === this.H) return;
       this.dpr = dpr;
       this.W = w;
       this.H = h;
-      this.canvas.width = Math.round(w * dpr);
-      this.canvas.height = Math.round(h * dpr);
-      this.groundY = Math.round(h * 0.8);
+      this.canvas.width = bw;
+      this.canvas.height = bh;
+      // Tall portrait screens get a bit more grass so the action sits lower in the frame.
+      this.groundY = Math.round(h * (h > w * 1.4 ? 0.76 : 0.8));
+      this.skyGradient = null;
+    }
+
+    /** Lower or raise render resolution (called by the game's frame-time monitor). */
+    setQuality(q) {
+      const next = Math.max(0.5, Math.min(1, Math.round(q * 100) / 100));
+      if (next === this.quality) return false;
+      this.quality = next;
+      this.W = -1; // force a resize
+      this.resize();
+      return true;
     }
 
     /** Pixels per metre that frames Jason and his juggle nicely. */
     juggleScale() {
-      return Math.min(170, Math.max(60, (this.groundY - 50) / 3.5), this.W / 4.2);
+      // Narrow portrait phones zoom in more, so Jason isn't a speck.
+      return Math.min(170, Math.max(60, (this.groundY - 50) / 3.6), this.W / (this.W < 600 ? 3.3 : 4.2));
     }
 
     setField(objects) {
@@ -127,16 +148,20 @@
       if (st.jason) this.drawJason(st.jason);
       if (st.showSweet && st.jason) this.drawSweetSpot(st);
       if (st.trail) this.drawTrail(st.trail, st.time);
+      if (st.ball && st.ball.visible && st.golden) this.drawGoldenGlow(st.ball.x, st.ball.y, st.time);
       if (st.ball && st.ball.visible) this.drawBall(st.ball.x, st.ball.y, st.ball.rot, st.time);
       this.drawParticles();
     }
 
     drawSky(st) {
       const { ctx, W, groundY } = this;
-      const g = ctx.createLinearGradient(0, 0, 0, groundY);
-      g.addColorStop(0, '#4fb3f6');
-      g.addColorStop(1, '#d4f0ff');
-      ctx.fillStyle = g;
+      if (!this.skyGradient) {
+        const g = ctx.createLinearGradient(0, 0, 0, groundY);
+        g.addColorStop(0, '#4fb3f6');
+        g.addColorStop(1, '#d4f0ff');
+        this.skyGradient = g;
+      }
+      ctx.fillStyle = this.skyGradient;
       ctx.fillRect(0, 0, W, groundY + 2);
 
       // Sun
@@ -262,7 +287,9 @@
         const label = `${t.name}`;
         const sub = `${t.pts} pts · ×3 bullseye`;
         ctx.font = 'bold 13px system-ui, sans-serif';
-        const w = Math.max(ctx.measureText(label).width, 110) + 16;
+        this.signWidths = this.signWidths || {};
+        if (this.signWidths[label] == null) this.signWidths[label] = Math.max(ctx.measureText(label).width, 110) + 16;
+        const w = this.signWidths[label];
         this.roundRect(cx - w / 2, signY - 38, w, 38, 7);
         ctx.fillStyle = t.color;
         ctx.fill();
@@ -299,8 +326,11 @@
 
     drawLandmarks() {
       for (const t of P.TARGETS) {
-        // Landmarks sit up to ~250 landmark-units right of their target, so widen the cull margin.
-        if (!this.visible(t.x, 900 + 250 * Math.max(this.scale, 2))) continue;
+        // Landmarks span roughly -170..+260 landmark-units around their target; skip any that
+        // can't touch the screen (this used to draw far-off landmarks every frame).
+        const ls = Math.max(this.scale, 2.2);
+        const csx = this.sx(t.x);
+        if (csx + 260 * ls < -50 || csx - 170 * ls > this.W + 50) continue;
         const cx = this.sx(t.x);
         const gy = this.groundY;
         switch (t.name) {
@@ -1687,6 +1717,24 @@
         ctx.strokeStyle = 'rgba(0,0,0,0.35)';
         ctx.lineWidth = 1;
         if (ball.style !== 'egg') { ctx.beginPath(); ctx.arc(X, Y, r, 0, Math.PI * 2); ctx.stroke(); }
+      }
+    }
+
+    /** Pulsing gold aura that marks a Golden Ball. */
+    drawGoldenGlow(x, y, time) {
+      const ctx = this.ctx;
+      const r = Math.max(0.11 * this.scale, 5);
+      const X = this.sx(x), Y = this.sy(y) - r * 0.2;
+      const pulse = 1 + 0.15 * Math.sin(time * 8);
+      const g = ctx.createRadialGradient(X, Y, r * 0.8, X, Y, r * 2.6 * pulse);
+      g.addColorStop(0, 'rgba(255,213,79,0.85)');
+      g.addColorStop(1, 'rgba(255,193,7,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(X, Y, r * 2.6 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      for (let i = 0; i < 3; i++) {
+        const a = time * 3 + (i * Math.PI * 2) / 3;
+        this.star(X + Math.cos(a) * r * 1.8, Y + Math.sin(a) * r * 1.8, Math.max(2, r * 0.3));
       }
     }
 

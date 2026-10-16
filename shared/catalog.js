@@ -165,21 +165,72 @@
     return Math.floor(score / POINTS_PER_COIN) + ROUND_COMPLETION_COINS;
   }
 
+  // ---- Kick rewards --------------------------------------------------------
+  const GOLDEN_MULT = 4;            // Golden Balls pay ×4 coins
+  const COMBO_STEP = 0.25;          // each GREAT/PERFECT in a row adds +0.25× ...
+  const COMBO_MAX = 3;              // ... up to ×3
+  const VETERAN_FROM_LEVEL = 10;    // +1% coins per player level above 10 ...
+  const VETERAN_MAX = 1.5;          // ... up to +150%
+
+  /** Coin multiplier for a run of consecutive good kicks (streak counts this kick). */
+  function comboMult(streak) {
+    return Math.min(COMBO_MAX, 1 + COMBO_STEP * Math.max(0, (streak | 0) - 1));
+  }
+  function veteranMult(xp) {
+    return 1 + Math.min(VETERAN_MAX, Math.max(0, levelFromXp(xp || 0) - VETERAN_FROM_LEVEL) * 0.01);
+  }
+  /** A kick that keeps a combo going. */
+  function isGoodKick(result) {
+    return !result.whiff && result.quality >= 0.8;
+  }
+
   /**
    * Pay out one kick: coins and XP land immediately, and any level-up bonus with them.
+   * opts: { freeKick, streak (good kicks in a row including this one, 0 if this one wasn't good), golden }.
    * Mutates the profile and returns what was paid.
    */
   function awardKick(profile, points, opts) {
     opts = opts || {};
     const baseCoins = opts.freeKick ? Math.floor(Math.max(0, points) / FREE_KICK_POINTS_PER_COIN) : coinsForKick(points);
-    const coins = Math.floor(baseCoins * prestigeCoinMult(profile.prestige));
+    const combo = comboMult(opts.streak);
+    const golden = opts.golden ? GOLDEN_MULT : 1;
+    const veteran = veteranMult(profile.xp);
+    const coins = Math.floor(baseCoins * prestigeCoinMult(profile.prestige) * veteran * combo * golden);
     const xp = opts.freeKick ? Math.floor(points / 2) : points;
     const levelBefore = levelFromXp(profile.xp);
     profile.xp += xp;
     const levelAfter = levelFromXp(profile.xp);
     const levelBonus = levelUpBonus(levelBefore, levelAfter);
     profile.coins += coins + levelBonus;
-    return { coins, xp, levelBefore, levelAfter, levelBonus };
+    return { coins, baseCoins, xp, levelBefore, levelAfter, levelBonus, combo, golden: !!opts.golden, veteran, streak: opts.streak | 0 };
+  }
+
+  // ---- Kick Crates: a prize at the end of every finished round ---------------
+  const CRATES = [
+    { id: 'common', name: 'Common Crate', icon: '📦', chance: 0.6, mult: 1 },
+    { id: 'rare', name: 'Rare Crate', icon: '🎁', chance: 0.3, mult: 3 },
+    { id: 'epic', name: 'Epic Crate', icon: '💜', chance: 0.09, mult: 8 },
+    { id: 'legendary', name: 'Legendary Crate', icon: '👑', chance: 0.01, mult: 25 },
+  ];
+
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  /** Open this round's crate (fixed by the round, so it can't be re-rolled). Pays the profile. */
+  function openCrate(profile, roundKey) {
+    let x = hashString(String(roundKey));
+    x ^= x >>> 16; x = Math.imul(x, 0x45d9f3b); x ^= x >>> 16;
+    const roll = (x >>> 0) / 4294967296;
+    let acc = 0;
+    let crate = CRATES[0];
+    for (const c of CRATES) { acc += c.chance; if (roll < acc) { crate = c; break; } }
+    const level = levelFromXp(profile.xp || 0);
+    const coins = Math.round(((60 + 25 * level) * crate.mult * prestigeCoinMult(profile.prestige)) / 10) * 10;
+    profile.coins += coins;
+    return { id: crate.id, name: crate.name, icon: crate.icon, coins };
   }
 
   function utcDay(ts) {
@@ -352,6 +403,8 @@
     awardKick, applyDaily, checkMilestones, nextUnlocks, upgradeCost, UPGRADE_LATE_GROWTH,
     PRESTIGE_BASE_REQ, PRESTIGE_REQ_STEP, PRESTIGE_COIN_BONUS, PRESTIGE_POWER_BONUS, PRESTIGE_START_COINS, MAX_PRESTIGE,
     totalUpgradeLevels, prestigeRequirement, prestigeCoinMult, prestigeRewardsAt, applyPrestige,
+    GOLDEN_MULT, COMBO_STEP, COMBO_MAX, VETERAN_FROM_LEVEL, VETERAN_MAX, CRATES,
+    comboMult, veteranMult, isGoodKick, openCrate,
     applyPurchase, applyEquip, newProfile,
   };
 });

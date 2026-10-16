@@ -165,7 +165,7 @@ button { font-family: inherit; }
 
 .menu-card {
   margin: max(4vh, 16px) auto 16px; width: min(440px, 100%); text-align: center;
-  background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(6px); border-radius: 26px; padding: 22px 18px 16px; box-shadow: var(--shadow);
+  background: rgba(255, 255, 255, 0.95); border-radius: 26px; padding: 22px 18px 16px; box-shadow: var(--shadow);
 }
 .logo { font-family: var(--font-display); line-height: 0.92; display: flex; flex-direction: column; }
 .logo span:first-child { font-size: clamp(46px, 13vw, 66px); color: var(--blue); text-shadow: 0 4px 0 var(--blue-dark); }
@@ -283,7 +283,7 @@ td.act button { border: none; border-radius: 8px; padding: 5px 9px; font-weight:
 .stat b { font-family: var(--font-display); font-weight: 400; font-size: 22px; color: var(--blue); }
 code.token { display: block; background: #f6f9fb; padding: 10px; border-radius: 10px; word-break: break-all; font-size: 13px; }
 
-@media (min-width: 900px) {
+@media (min-width: 700px) {
   #screen-menu { justify-content: flex-end; align-items: center; padding-right: 6vw; }
   #screen-menu .menu-card { margin: 0; }
 }
@@ -393,3 +393,155 @@ button.gold small { color: rgba(59, 42, 0, 0.75) !important; }
 .item.ch .upbar { margin-top: 2px; }
 .item.ch .ms-reward { font-weight: 900; color: #b07800; }
 .item.ch.equipped .ms-reward { color: var(--green-dark); }
+
+/* ---------- v1.5: grind rewards ---------- */
+.hud-pill.combo b { color: #e65100; }
+#hud.golden .hud-pill.coins { box-shadow: 0 0 0 3px #ffd54f, 0 3px 10px rgba(0, 0, 0, 0.15); }
+#hud.golden #hint { color: #fff3c4; }
+.coin-why { color: var(--muted); font-weight: 800; }
+.crate {
+  display: flex; align-items: center; gap: 12px; justify-content: center; border-radius: 14px; padding: 10px 14px; margin: 8px 0;
+  font-weight: 900; animation: crate-pop 0.7s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.crate .crate-icon { font-size: 34px; animation: crate-shake 0.6s ease 0.1s 2; }
+.crate div { display: flex; flex-direction: column; }
+.crate span { font-family: var(--font-display); font-weight: 400; font-size: 22px; }
+.crate-common { background: #eef3f7; color: var(--ink); }
+.crate-rare { background: #e1f1fb; color: var(--blue-dark); }
+.crate-epic { background: linear-gradient(90deg, #ede7f6, #f3e5f5); color: #5e35b1; }
+.crate-legendary { background: linear-gradient(90deg, #fff8e1, #ffe082); color: #8d5b00; box-shadow: 0 0 0 3px #ffd54f; }
+@keyframes crate-pop { from { transform: scale(0.6); opacity: 0; } }
+@keyframes crate-shake { 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
+
+/* =====================================================================
+   v1.5 responsive layer: phones, landscape, foldables, desktop
+   ===================================================================== */
+button, .hud-btn, canvas#game { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+body { -webkit-text-size-adjust: 100%; }
+
+/* HUD: one row that shrinks to fit; menu & sound pinned at the ends. */
+.hud-top {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px;
+  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+  max-width: 980px; margin: 0 auto;
+}
+.hud-pills { display: flex; gap: 6px; justify-content: center; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.hud-pill { min-width: 0; flex: 0 1 auto; padding: 4px 12px; }
+.hud-pill b { white-space: nowrap; }
+#track { margin-top: 8px; }
+#result { max-height: calc(100dvh - 150px); overflow-y: auto; overscroll-behavior: contain; }
+#result .res-more { font-size: 13px; color: var(--muted); font-weight: 800; }
+
+@media (max-width: 520px) {
+  .hud-top { gap: 4px; }
+  .hud-pills { gap: 4px; }
+  .hud-pill { padding: 3px 7px; border-radius: 12px; }
+  .hud-pill .lbl { font-size: 8.5px; letter-spacing: 0.04em; }
+  .hud-pill b { font-size: 15px; }
+  .hud-btn { width: 36px; height: 36px; font-size: 15px; }
+  #track { margin-top: 6px; width: calc(100vw - 24px); }
+  #distance { top: 92px; font-size: clamp(36px, 12vw, 56px); }
+  #toasts { bottom: 64px; }
+  #hint { font-size: 15px; }
+  #result { padding: 14px 16px 10px; top: 50%; }
+  .res-label { font-size: 22px; }
+  .res-dist { font-size: 42px; }
+  .res-points { font-size: 24px; }
+}
+@media (max-width: 360px) {
+  .hud-pill { padding: 3px 5px; }
+  .hud-pill b { font-size: 13px; }
+  .hud-pill .lbl { font-size: 8px; }
+}
+
+/* Menu: compact on small phones. */
+@media (max-width: 480px) {
+  #screen-menu { padding: max(10px, env(safe-area-inset-top)) 10px 10px; }
+  .menu-card { padding: 16px 12px 12px; border-radius: 22px; margin: 4px auto; }
+  .logo span:first-child { font-size: 44px; }
+  .logo span:last-child { font-size: 32px; }
+  .tagline { font-size: 13px; margin: 6px 2px 8px; }
+  .profile-chip { font-size: 13px; padding: 5px 12px; margin-bottom: 8px; }
+  .menu-buttons { gap: 7px; }
+  .menu-buttons button { padding: 10px 10px; font-size: 15px; }
+  button.big { font-size: 17px; padding: 11px; }
+  .menu-buttons button small { font-size: 11px; }
+}
+@media (max-width: 480px) and (max-height: 760px) {
+  .tagline { display: none; }
+  .menu-buttons .row button small { display: none; }
+}
+
+/* Landscape phones: logo on the left, buttons on the right, nothing cut off. */
+@media (orientation: landscape) and (max-height: 540px) {
+  #screen-menu { align-items: center; justify-content: center; padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); }
+  .menu-card {
+    width: min(820px, 100%); margin: 0; padding: 14px; display: grid; grid-template-columns: 0.9fr 1.3fr; gap: 6px 16px;
+    max-height: calc(100dvh - 16px); overflow-y: auto; align-items: start;
+  }
+  .menu-head { grid-column: 1; align-self: center; }
+  .menu-buttons { grid-column: 2; grid-row: 1 / span 2; }
+  #onlineStatus { grid-column: 1; margin-top: 0; }
+  .logo span:first-child { font-size: 46px; }
+  .logo span:last-child { font-size: 34px; }
+  .tagline { font-size: 13px; }
+  .menu-buttons { gap: 6px; }
+  .menu-buttons button { padding: 8px 10px; font-size: 14px; }
+  button.big { font-size: 16px; padding: 9px; }
+  .menu-buttons small { font-size: 11px; }
+  .hud-top { padding-top: 6px; }
+  #distance { top: 70px; font-size: 40px; }
+  #result { max-height: calc(100dvh - 96px); top: calc(50% + 34px); padding: 10px 18px 8px; }
+  .res-dist { font-size: 36px; }
+  .card { max-height: calc(100dvh - 16px); }
+  .screen { padding: 8px; }
+}
+
+/* Phones: full-screen sheets for the shop, career, leaderboard etc. */
+@media (max-width: 560px) {
+  .screen:not(#screen-menu) { padding: 0; align-items: stretch; }
+  .screen:not(#screen-menu) > .card {
+    width: 100%; max-height: none; min-height: 100dvh; border-radius: 0; margin: 0;
+    padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+  }
+  #screen-modal > .card { min-height: 0; margin: auto 0 0; border-radius: 22px 22px 0 0; }
+  .close { position: sticky; top: 0; float: right; z-index: 2; margin: -4px -4px 0 0; }
+  .card h2 { font-size: 24px; }
+  .grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .item { padding: 10px; }
+  .item .desc { font-size: 12px; }
+  .career-head { gap: 10px; }
+  .kick-list { gap: 4px; }
+  .kick-list div { font-size: 11px; padding: 5px 1px; }
+  .kick-list div b { font-size: 12px; }
+  .end-score { font-size: 52px; }
+}
+@media (max-width: 380px) {
+  .grid { grid-template-columns: 1fr; }
+}
+/* Keep the end-of-round buttons reachable without scrolling. */
+#screen-end .actions {
+  position: sticky; bottom: calc(-1 * max(16px, env(safe-area-inset-bottom)));
+  background: linear-gradient(180deg, rgba(255,255,255,0), #fff 18px); padding: 18px 0 max(10px, env(safe-area-inset-bottom)); margin-bottom: -6px;
+}
+
+/* Foldables & tablets (unfolded inner screens, ~700-1100 px): bigger touch targets, side-by-side menu. */
+@media (min-width: 700px) and (max-width: 1100px) and (min-height: 700px) {
+  .menu-card { width: min(420px, 48vw); }
+  .hud-pill b { font-size: 21px; }
+  .hud-btn { width: 46px; height: 46px; }
+}
+/* Dual-screen / spanned foldables: keep the menu on one panel and the game on the other. */
+@media (horizontal-viewport-segments: 2) {
+  #screen-menu { justify-content: flex-start; padding-left: calc(env(viewport-segment-left 1 0) + 16px); }
+  #screen-menu .menu-card { width: calc(env(viewport-segment-width 1 0) - 32px); }
+  .screen:not(#screen-menu) { padding-left: calc(env(viewport-segment-left 1 0) + 16px); }
+}
+@media (vertical-viewport-segments: 2) {
+  .screen { align-items: flex-end; padding-top: calc(env(viewport-segment-top 0 1) + 8px); }
+}
+
+/* Big desktop screens: scale the UI up a touch so it isn't tiny. */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .hud-top, #track, #result, #distance, .menu-card, .card { zoom: 1.15; }
+}

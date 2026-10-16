@@ -71,6 +71,8 @@
       $('#pillReplay').classList.toggle('hidden', mode !== 'replay');
       $('#pillCoins').classList.toggle('hidden', mode === 'replay');
       this.roundCoins = 0;
+      this.setCombo(0, 1);
+      this.golden(false);
       $('#hudCoins').textContent = '+0';
       $('#hudReplay').textContent = opts.replay || '';
       $('#pillBeat').classList.toggle('hidden', !opts.beat);
@@ -86,6 +88,7 @@
       this.hideResult();
     },
     hide() {
+      this.golden(false);
       $('#hud').classList.add('hidden');
       $('#roomPanel').classList.add('hidden');
       this.hideResult();
@@ -144,7 +147,13 @@
       if (r.extra) sub.push(esc(r.extra));
       if (r.earned) {
         const got = r.earned.coins + (r.earned.levelBonus || 0);
-        if (got > 0) sub.push(`<span class="coin-gain">+${fmt(r.earned.coins)} 🪙</span>`);
+        const e = r.earned;
+        const why = [];
+        if (e.golden) why.push(`🌟 golden ×${C.GOLDEN_MULT}`);
+        if (e.combo > 1) why.push(`🔥 combo ×${e.combo}`);
+        if (e.veteran > 1) why.push(`🎖️ veteran +${Math.round((e.veteran - 1) * 100)}%`);
+        if (got > 0) sub.push(`<span class="coin-gain">+${fmt(e.coins)} 🪙</span>${why.length ? ` <small class="coin-why">(${why.join(' · ')})</small>` : ''}`);
+        this.setCombo(e.streak, e.combo);
         if (r.earned.levelAfter > r.earned.levelBefore) {
           sub.push(`<span class="best">⬆️ LEVEL ${r.earned.levelAfter}! +${fmt(r.earned.levelBonus)} 🪙</span>`);
           sfx.levelUp();
@@ -156,7 +165,11 @@
       const ms = r.milestones || [];
       const chs = r.challenges || [];
       $('#resMs').classList.toggle('hidden', !ms.length && !chs.length);
-      $('#resMs').innerHTML = ms.map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`)
+      const msLines = ms.length > 3
+        ? ms.slice(0, 2).map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`)
+          .concat(`<span class="res-more">🏅 +${ms.length - 2} more milestones · +${fmt(ms.slice(2).reduce((n, m) => n + m.reward, 0))} 🪙</span>`)
+        : ms.map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`);
+      $('#resMs').innerHTML = msLines
         .concat(chs.map((c) => `✅ ${c.weekly ? 'Weekly' : 'Daily'} challenge: <b>${esc(c.text)}</b> +${fmt(c.reward)} 🪙`)).join('<br>');
       if (chs.length) setTimeout(() => sfx.levelUp(), 250);
       if (r.henry) toast('🪿 Henry loves it! QUACK!', 'good');
@@ -169,6 +182,21 @@
     },
     hideResult() { $('#result').classList.add('hidden'); },
     /** Tick the in-round coin counter up so earnings feel continuous. */
+    /** Show the live combo while a streak of good kicks is running. */
+    setCombo(streak, mult) {
+      const on = streak >= 2;
+      $('#pillCombo').classList.toggle('hidden', !on);
+      if (on) {
+        $('#hudCombo').textContent = `×${mult}`;
+        const pill = $('#pillCombo');
+        pill.classList.remove('bump');
+        void pill.offsetWidth;
+        pill.classList.add('bump');
+      }
+    },
+    golden(on) {
+      $('#hud').classList.toggle('golden', !!on);
+    },
     countCoins(amount) {
       if (!amount) return;
       const el = $('#hudCoins');
@@ -390,12 +418,14 @@
     S.screen = name;
     $$('.screen').forEach((el) => el.classList.toggle('hidden', el.id !== `screen-${name}`));
     game.inputBlocked = !!name && (game.mode === 'play' || game.mode === 'replay');
+    game.covered = !!name && name !== 'menu' && name !== 'modal' && window.innerWidth <= 560;
     if (name) hud.hint(null);
   }
   function hideScreens() {
     S.screen = null;
     $$('.screen').forEach((el) => el.classList.add('hidden'));
     game.inputBlocked = false;
+    game.covered = false;
   }
 
   function activeProfile() {
@@ -587,7 +617,8 @@
       submit: (index, frame, sim, pts) => {
         total += pts;
         // Coins and XP land after every kick, just like online.
-        const earned = C.awardKick(prof, pts, { freeKick: endless });
+        cur.streak = C.isGoodKick(sim) ? (cur.streak || 0) + 1 : 0;
+        const earned = C.awardKick(prof, pts, { freeKick: endless, streak: cur.streak, golden: P.isGoldenBall(sim.seed) });
         cur.kicks.push({ d: sim.distance, p: pts, t: sim.target, c: earned.coins, lb: earned.levelBonus });
         const newBestKick = sim.distance > prof.bestKick;
         if (newBestKick) prof.bestKick = sim.distance;
@@ -617,16 +648,17 @@
           prof.coins += applied.outcome.reward;
           career = applied.outcome;
         }
+        const crate = C.openCrate(prof, `offline:${baseSeed}:${prof.roundsPlayed}`);
         const roundChallenges = endless ? [] : CH.progress(prof, { round: { score: total, careerWon: !!(career && career.won) } });
         cur.challenges.push(...roundChallenges);
         const roundMilestones = C.checkMilestones(prof, { roundScore: total });
         saveOffline();
         showEnd({
           kind: cur.kind, offline: true, kicks: cur.kicks, score: total, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: total,
-          newBestRound, levelBefore, levelAfter, levelBonus, career, daily, milestones: roundMilestones, kickMilestones: cur.milestones,
+          newBestRound, levelBefore, levelAfter, levelBonus, career, daily, crate, milestones: roundMilestones, kickMilestones: cur.milestones,
           challengesDone: cur.challenges,
           coinBreakdown: {
-            points: kickCoins, completion: C.ROUND_COMPLETION_COINS, daily: daily.bonus, levelBonus,
+            points: kickCoins, completion: C.ROUND_COMPLETION_COINS, daily: daily.bonus, crate: crate.coins, levelBonus,
             career: career ? career.reward : 0, milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
           },
           nextUnlock: C.nextUnlocks(levelAfter),
@@ -653,7 +685,8 @@
     if (!b) return '';
     const kickMs = (s.kickMilestones || []).reduce((n, m) => n + m.reward, 0);
     const rows = [
-      [`Kick coins (1 per ${C.POINTS_PER_COIN} pts, paid each kick)`, b.points],
+      [`Kick coins (1 per ${C.POINTS_PER_COIN} pts, with combos, golden balls & bonuses)`, b.points],
+      [s.crate ? `${s.crate.icon} ${s.crate.name}` : 'Kick Crate', b.crate || 0],
       ['Round completion bonus', b.completion],
       [`Daily bonus${s.daily && s.daily.streak > 1 ? ` (🔥 ${s.daily.streak}-day streak)` : ''}`, b.daily || 0],
       [`Level-up bonus`, b.levelBonus],
@@ -693,6 +726,11 @@
     }
     if (s.newBestRound) banners += '<div class="banner">★ New personal best round!</div>';
     if (s.levelAfter > s.levelBefore) banners += `<div class="banner green">⬆️ Level ${s.levelAfter}!</div>`;
+    if (s.crate) {
+      banners += `<div class="crate crate-${s.crate.id}"><span class="crate-icon">${s.crate.icon}</span>
+        <div><b>${esc(s.crate.name)}!</b><span>+${fmt(s.crate.coins)} 🪙</span></div></div>`;
+      if (s.crate.id === 'epic' || s.crate.id === 'legendary') setTimeout(() => sfx.levelUp(), 600);
+    }
     const chDone = s.challengesDone || [];
     if (chDone.length) banners += `<div class="banner green">✅ ${chDone.map((c) => `${esc(c.text)} <small>+${fmt(c.reward)}</small>`).join(' · ')}</div>`;
     const ms = (s.kickMilestones || []).concat(s.milestones || []);
@@ -813,6 +851,10 @@
   function coinGuideHtml() {
     return `<ul class="howto coin-guide">
       <li><b>Every kick:</b> 1 coin for every ${C.POINTS_PER_COIN} points, paid as soon as the ball stops (Free Kick: 1 per ${C.FREE_KICK_POINTS_PER_COIN}).</li>
+      <li><b>🔥 Combos:</b> GREAT or PERFECT kicks in a row multiply your kick coins: ×1.25, ×1.5… up to ×${C.COMBO_MAX}.</li>
+      <li><b>🌟 Golden Balls:</b> about 1 ball in 8 glows gold. Kick it for ×${C.GOLDEN_MULT} coins.</li>
+      <li><b>🎖️ Veteran bonus:</b> +1% coins for every level above ${C.VETERAN_FROM_LEVEL} (up to +${Math.round(C.VETERAN_MAX * 100)}%).</li>
+      <li><b>🎁 Kick Crates:</b> every finished round opens a crate: Common, Rare, Epic or Legendary, worth more as you level up.</li>
       <li><b>Finish a round:</b> +${C.ROUND_COMPLETION_COINS} completion bonus.</li>
       <li><b>Daily streak:</b> your first round each day pays ${C.DAILY_BONUS_PER_DAY} × your streak (up to ${fmt(C.DAILY_BONUS_PER_DAY * C.DAILY_BONUS_MAX_DAYS)} on day ${C.DAILY_BONUS_MAX_DAYS}+).</li>
       <li><b>Level up:</b> bonus coins every level (${fmt(C.levelUpCoins(2))} at level 2, rising by 25 each level).</li>

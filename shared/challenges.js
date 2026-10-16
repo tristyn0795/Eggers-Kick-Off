@@ -15,6 +15,8 @@
   const DAILY_COUNT = 3;
   const WEEKLY_COUNT = 3;
   const WEEKLY_MULT = 5;
+  // Bump when challenge rules change: everyone's current challenges are re-rolled once.
+  const VERSION = 2;
 
   const round50 = (n) => Math.max(50, Math.round(n / 50) * 50);
   const round100 = (n) => Math.max(100, Math.round(n / 100) * 100);
@@ -49,9 +51,15 @@
     },
     {
       id: 'spot', icon: '📍', dailyOnly: true, make: (p, w, rng) => {
-        // A named spot within reach of this player's best kick (Allen nods included!).
-        const reach = Math.max(800, (p.bestKick || 0) * 0.85);
-        const spots = P.TARGETS.filter((t) => t.x <= reach && !t.beacon);
+        // A named spot where this player's kicks usually land: not one they've long since kicked
+        // past, and not one they can't reach yet. (Allen nods included!)
+        const best = Math.max(800, p.bestKick || 0);
+        let spots = P.TARGETS.filter((t) => !t.beacon && t.x >= best * 0.35 && t.x <= best * 0.85);
+        if (!spots.length) {
+          // Nothing in the sweet band: take the furthest target that's still within reach.
+          const reachable = P.TARGETS.filter((t) => !t.beacon && t.x <= best * 0.9);
+          spots = reachable.slice(-1);
+        }
         const t = spots[Math.floor(rng() * spots.length)] || P.TARGETS[0];
         return { goal: 1, target: t.name, text: () => `Stop the ball at ${t.local ? '' : 'the '}${t.name}` };
       },
@@ -112,8 +120,12 @@
   /** Make sure the profile has this day's and week's challenges. Returns true if anything changed. */
   function roll(profile, now) {
     const { day, week } = periodKeys(now);
-    const ch = profile.challenges || {};
+    let ch = profile.challenges || {};
     let changed = false;
+    if (ch.v !== VERSION) {
+      ch = { v: VERSION };
+      changed = true;
+    }
     if (ch.day !== day) {
       ch.day = day;
       ch.daily = build(profile, `d:${day}`, false);

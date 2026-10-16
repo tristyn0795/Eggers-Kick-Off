@@ -119,7 +119,9 @@ test('prestige: requirement, reset, permanent bonuses and prestige gear', () => 
   assert.strictEqual(p.xp, xp, 'level kept');
   assert.ok(p.owned.includes('ball:cw') && p.milestones.includes('k500'), 'gear and milestones kept');
   assert.ok(C.isOwned(p, 'ball', 'star') && !C.isOwned(p, 'trail', 'aura'));
-  assert.strictEqual(C.awardKick(p, 800).coins, 110, '+10% coins');
+  const q = Object.assign(C.newProfile(), { xp: p.xp });
+  assert.strictEqual(C.awardKick(p, 800).coins, Math.floor(100 * 1.1 * C.veteranMult(xp)), '+10% coins');
+  assert.strictEqual(C.awardKick(q, 800).coins, Math.floor(100 * C.veteranMult(xp)));
   assert.strictEqual(P.stats({ prestige: 1 }).power, 1.02, '+2% power');
   assert.strictEqual(C.prestigeRequirement(1), 180);
   assert.strictEqual(C.prestigeRequirement(20), 300);
@@ -212,5 +214,38 @@ test('daily & weekly challenges: shared picks, personal goals, paid once, bonus 
   // Allen nods are on the map.
   for (const n of ['Market Street', 'Watters Creek Bathrooms', 'Celebration Park', 'Allen Premium Outlets', 'Allen Eagle Stadium']) {
     assert.ok(P.TARGETS.some((t) => t.name === n), n);
+  }
+});
+
+test('grind rewards: combos, Golden Balls, veteran bonus and crates', () => {
+  assert.deepStrictEqual([0, 1, 2, 3, 5, 9, 20].map(C.comboMult), [1, 1, 1.25, 1.5, 2, 3, 3]);
+  assert.strictEqual(C.veteranMult(0), 1);
+  assert.strictEqual(C.veteranMult(C.xpForLevel(63)), 1.53);
+  assert.strictEqual(C.veteranMult(C.xpForLevel(500)), 2.5, 'capped at +150%');
+  const p = C.newProfile();
+  const plain = C.awardKick(Object.assign(C.newProfile()), 800);
+  const hot = C.awardKick(p, 800, { streak: 5, golden: true });
+  assert.strictEqual(hot.coins, plain.coins * 2 * C.GOLDEN_MULT);
+  let golden = 0;
+  for (let i = 0; i < 4000; i++) if (P.isGoldenBall(P.kickSeed(i, i % 10))) golden++;
+  assert.ok(golden > 350 && golden < 650, `about 1 in 8 balls are golden (${golden}/4000)`);
+  const a = C.newProfile();
+  const b = C.newProfile();
+  assert.deepStrictEqual(C.openCrate(a, 'round-1'), C.openCrate(b, 'round-1'), 'a round\'s crate is fixed');
+  const seen = new Set();
+  for (let i = 0; i < 3000; i++) seen.add(C.openCrate(C.newProfile(), `r${i}`).id);
+  assert.deepStrictEqual([...seen].sort(), ['common', 'epic', 'legendary', 'rare']);
+});
+
+test('landmark challenges match the player\'s range', () => {
+  const CH = require('../shared/challenges');
+  for (let d = 1; d <= 40; d++) {
+    const pro = Object.assign(C.newProfile(), { bestKick: 20000 });
+    CH.roll(pro, Date.UTC(2026, 9, d, 12));
+    const spot = pro.challenges.daily.find((c) => c.id === 'spot');
+    if (spot) {
+      const t = P.TARGETS.find((x) => x.name === spot.target);
+      assert.ok(t.x >= 7000 && t.x <= 18000, `${spot.target} suits a 20 km kicker`);
+    }
   }
 });

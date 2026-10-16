@@ -378,6 +378,11 @@
     return result;
   }
 
+  /** Roughly 1 ball in 8 is a Golden Ball (worth extra coins). Fixed by the ball's seed, so everyone agrees. */
+  function isGoldenBall(seed) {
+    return hashSeed(seed >>> 0, 0x601D) % 8 === 0;
+  }
+
   /**
    * How many path frames to advance per 60 Hz tick when replaying a kick. Long kicks
    * speed up so even a 40 km boot plays out in roughly ten seconds.
@@ -396,7 +401,7 @@
   }
 
   return {
-    DT, G, playbackSpeed, playbackTicks, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
+    DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
     KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,

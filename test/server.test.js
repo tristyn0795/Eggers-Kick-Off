@@ -101,7 +101,9 @@ test('coins are paid per kick, daily bonus on the first round', async () => {
   let last;
   for (let i = 0; i < 10; i++) {
     last = await api('/api/round/kick', { roundId, index: i, frame: bestFrame(P.kickSeed(baseSeed, i), upgrades) }, token);
-    assert.strictEqual(last.body.earned.coins, Math.floor(last.body.points / 8));
+    const e = last.body.earned;
+    assert.strictEqual(e.golden, P.isGoldenBall(P.kickSeed(baseSeed, i)), 'server and client agree on Golden Balls');
+    assert.strictEqual(e.coins, Math.floor(Math.floor(last.body.points / 8) * e.veteran * e.combo * (e.golden ? 4 : 1)));
     if (i < 9) {
       assert.ok(last.body.player.coins >= coins + last.body.earned.coins, 'wallet grows during the round');
       coins = last.body.player.coins;
@@ -110,6 +112,8 @@ test('coins are paid per kick, daily bonus on the first round', async () => {
   const b = last.body.summary.coinBreakdown;
   assert.strictEqual(b.daily, 50, 'first round of the day pays the daily bonus');
   assert.strictEqual(b.completion, 20);
+  assert.ok(last.body.summary.crate && last.body.summary.crate.coins > 0, 'every finished round opens a crate');
+  assert.strictEqual(b.crate, last.body.summary.crate.coins);
   assert.strictEqual(last.body.summary.daily.streak, 1);
 });
 

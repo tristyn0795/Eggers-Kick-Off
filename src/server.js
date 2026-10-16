@@ -356,8 +356,13 @@ async function main() {
           player.bestKickIndex = index;
         }
         // Coins and XP are paid on every kick so the wallet ticks up as you play.
-        const award = C.awardKick(player, points);
+        // Good kicks in a row build a combo; Golden Balls pay extra.
         const entry = round.kicks[round.kicks.length - 1];
+        entry.g = C.isGoodKick(result) ? 1 : 0;
+        let streak = 0;
+        for (let i = round.kicks.length - 1; i >= 0 && round.kicks[i].g; i--) streak++;
+        const golden = P.isGoldenBall(P.kickSeed(round.baseSeed, index));
+        const award = C.awardKick(player, points, { streak, golden });
         entry.c = award.coins;
         entry.lb = award.levelBonus;
         const milestones = C.checkMilestones(player, { kick: result });
@@ -394,14 +399,16 @@ async function main() {
           }
           const roundChallenges = CH.progress(player, { round: { score: round.score, careerWon: !!(career && career.won) } });
           challenges.push(...roundChallenges);
+          const crate = C.openCrate(player, `${round.id}:${player.id}`);
           const roundMilestones = C.checkMilestones(player, { roundScore: round.score });
           summary = {
             score: round.score, coins: kickCoins + C.ROUND_COMPLETION_COINS, xp: round.score, newBestRound,
-            levelBefore, levelAfter, levelBonus, challenge, career, daily,
+            levelBefore, levelAfter, levelBonus, challenge, career, daily, crate,
             coinBreakdown: {
               points: kickCoins,
               completion: C.ROUND_COMPLETION_COINS,
               daily: daily.bonus,
+              crate: crate.coins,
               levelBonus,
               career: career ? career.reward : 0,
               milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
@@ -432,7 +439,10 @@ async function main() {
 
     return {
       index, points, total: round.score, done, summary, newBestKick, milestones, challenges,
-      earned: { coins: award.coins, levelBonus: award.levelBonus, levelAfter: award.levelAfter, levelBefore: award.levelBefore },
+      earned: {
+        coins: award.coins, levelBonus: award.levelBonus, levelAfter: award.levelAfter, levelBefore: award.levelBefore,
+        combo: award.combo, streak: award.streak, golden: award.golden, veteran: award.veteran,
+      },
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,
         quality: result.quality, target: result.target, whiff: result.whiff,

@@ -1,6 +1,39 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.5.0',
+    date: '16 Oct 2026',
+    title: 'A better grind + phone, foldable & desktop polish 📱',
+    sections: [
+      {
+        heading: '🪙 The grind pays better (thanks John!)',
+        items: [
+          '🔥 Combos: land GREAT or PERFECT kicks in a row to multiply your coins, up to ×3. A poor kick resets the combo.',
+          '🌟 Golden Balls: about 1 ball in 8 glows gold. Kick it for ×4 coins.',
+          '🎖️ Veteran bonus: +1% coins for every level above 10 (up to +150%), so high levels earn more, not less.',
+          '🎁 Kick Crates: every finished round opens a Common, Rare, Epic or Legendary crate full of coins.',
+        ],
+      },
+      {
+        heading: '🎯 Smarter challenges',
+        items: [
+          'Landmark challenges now pick a spot where your kicks actually land. No more "hit the Coffee Cup" when you kick 20 km.',
+          "Today's challenges were re-rolled with the new rules.",
+        ],
+      },
+      {
+        heading: '📱 Phones, foldables & desktop',
+        items: [
+          'The game measures its own frame rate and lowers its resolution on slower phones to stay smooth.',
+          'Single-row HUD on phones; bigger Jason in portrait; result cards never run off screen.',
+          'Landscape phones get a side-by-side menu. Shop, Career and other screens are full-screen on phones.',
+          'Foldables: smooth fold/unfold, tablet-size layout when open, and the menu stays on one panel when spanning two screens.',
+          'Big desktop screens get a slightly larger UI.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.4.0',
     date: '16 Oct 2026',
     title: 'Daily & weekly challenges, Allen landmarks, tougher Career 🎯',

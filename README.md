@@ -28,6 +28,9 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 ### Progression
 - **Coins** are paid after every kick (1 per 8 points; Free Kick 1 per 10), plus a 20-coin round completion bonus,
   a **daily streak** bonus (50 × streak, max 350), level-up bonuses, 22 one-time **milestones** and Career boss bounties.
+- **Grind rewards:** 🔥 combos (consecutive GREAT/PERFECT kicks, up to ×3 coins), 🌟 Golden Balls (1 in 8, ×4 coins),
+  🎖️ a veteran bonus (+1% coins per level above 10, max +150%) and a 🎁 Kick Crate after every round.
+- **Daily & weekly challenges** with goals scaled to each player's bests (landmark challenges pick spots in your range).
 - Prices are built for a long grind: each upgrade level costs 1.6× the last (maxing everything ≈ 284k coins) and
   cosmetics run up to 100k.
 - Every round's points also count as **XP**. Something new unlocks at almost every level up to 30.

@@ -42,7 +42,17 @@
       this.fast = false;
       this.inputDown = false;
 
-      window.addEventListener('resize', () => this.r.resize());
+      // Phones rotate, foldables fold/unfold, browser bars slide: keep the canvas matched.
+      const onResize = () => {
+        const wasJuggleScale = Math.abs(this.scale - this.r.juggleScale()) < 0.5;
+        this.r.resize();
+        if (wasJuggleScale || !this.k || this.k.phase === 'juggle') this.scale = this.r.juggleScale();
+      };
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', () => setTimeout(onResize, 150));
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', onResize);
+      if (window.ResizeObserver) new ResizeObserver(onResize).observe(canvas);
+      this.perf = { ema: 16.7, slow: 0, fast: 0 };
       const press = (e) => {
         if (e.target && e.target.closest && e.target.closest('.ui, button, input, a')) return;
         this.input();
@@ -117,6 +127,7 @@
         seed,
         st,
         wind: P.windFor(seed),
+        golden: P.isGoldenBall(seed),
         objects: P.fieldObjects(seed, st.luck),
         juggler: P.createJuggler(seed, st),
         phase: 'juggle',
@@ -136,7 +147,12 @@
       this.fast = false;
       this.r.setField(k.objects);
       this.r.particles = [];
-      if (this.mode === 'play') this.hud.hint('Click, tap or press any key to kick — strike it in the green SWEET SPOT');
+      if (this.mode === 'play') {
+        this.hud.hint(k.golden
+          ? `🌟 GOLDEN BALL — this kick pays ×${window.EKCatalog.GOLDEN_MULT} coins!`
+          : 'Click, tap or press any key to kick — strike it in the green SWEET SPOT');
+        this.hud.golden(k.golden);
+      }
     }
 
     snapCamera() {
@@ -395,10 +411,29 @@
     }
 
     // ---- Frame ------------------------------------------------------------
+    /**
+     * Adaptive quality: if frames keep taking too long (a slow phone), render at a
+     * lower resolution; if there's plenty of headroom again, step back up.
+     */
+    trackPerformance(ms) {
+      if (ms > 100 || document.hidden) return;
+      const p = this.perf;
+      p.ema = p.ema * 0.9 + ms * 0.1;
+      if (p.ema > 24) { p.slow++; p.fast = 0; } else if (p.ema < 17.5) { p.fast++; p.slow = 0; } else { p.slow = 0; p.fast = 0; }
+      if (p.slow > 45 && this.r.quality > 0.5) { this.r.setQuality(this.r.quality - 0.15); p.slow = 0; p.ema = 16.7; }
+      if (p.fast > 600 && this.r.quality < 1) { this.r.setQuality(this.r.quality + 0.1); p.fast = 0; }
+    }
+
     frame(ts) {
       const dt = Math.min(0.1, (ts - this.last) / 1000);
+      this.trackPerformance(ts - this.last);
       this.last = ts;
       this.time += dt;
+      if (this.covered) {
+        // A full-screen sheet hides the field (phones): don't spend battery drawing it.
+        requestAnimationFrame((t) => this.frame(t));
+        return;
+      }
       if (this.k && this.mode !== 'idle' && this.mode !== 'ended') {
         this.acc += dt;
         let guard = 0;
@@ -420,7 +455,7 @@
       const inAir = k.phase === 'flight' || k.phase === 'landed' || k.phase === 'result' || k.phase === 'error';
       const js = r.juggleScale();
       let targetScale = js;
-      let targetAnchor = this.mode === 'attract' && r.W >= 900 ? 0.3 : 0.42;
+      let targetAnchor = this.mode === 'attract' && r.W >= 700 ? 0.3 : r.W < 600 ? 0.5 : 0.42;
       if (inAir) {
         // Pull out as the ball climbs; when it lands, keep enough field in view to see the targets.
         const maxAir = k.sim.whiff ? js : Math.min(js, Math.max(4, r.W / 230));
@@ -448,6 +483,7 @@
         ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true },
         jason: this.jasonPose(ball),
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
+        golden: k.golden && this.mode === 'play',
         henryHappy: k.phase === 'result' && !!k.henryHappy,
         henryBuddy: this.mode === 'attract',
         sweetWidth: k.st.sweetWidth,

@@ -21,13 +21,16 @@
   <div id="hud" class="hidden">
     <div class="hud-top">
       <button id="hudMenu" class="ui hud-btn" title="Menu" aria-label="Menu">☰</button>
+      <div class="hud-pills">
       <div class="hud-pill" id="pillKick"><span class="lbl">KICK</span><b id="hudKick">1/10</b></div>
       <div class="hud-pill" id="pillScore"><span class="lbl">SCORE</span><b id="hudScore">0</b></div>
       <div class="hud-pill hidden" id="pillBeat"><span class="lbl">TO BEAT</span><b id="hudBeat">0</b></div>
       <div class="hud-pill vs hidden" id="pillVs"><span class="lbl" id="hudVsName">VS</span><b id="hudVs">0</b></div>
       <div class="hud-pill hidden" id="pillReplay"><span class="lbl">REPLAY</span><b id="hudReplay"></b></div>
       <div class="hud-pill coins" id="pillCoins"><span class="lbl">COINS</span><b id="hudCoins">+0</b></div>
+      <div class="hud-pill combo hidden" id="pillCombo"><span class="lbl">COMBO</span><b id="hudCombo">×1</b></div>
       <div class="hud-pill"><span class="lbl">WIND</span><b id="hudWind">0</b></div>
+      </div>
       <button id="hudMute" class="ui hud-btn" title="Sound" aria-label="Toggle sound">🔊</button>
     </div>
     <div id="track"><div id="trackFill"></div><div id="trackMarks"></div><div id="trackBall">⚽</div></div>
@@ -53,9 +56,11 @@
   <!-- Main menu -->
   <section id="screen-menu" class="screen ui">
     <div class="menu-card">
-      <div class="logo"><span>EGGERS</span><span>KICK OFF</span></div>
-      <p class="tagline">Help Jason boot the ball to the <b>Click Wise Design</b> office&nbsp;— and way beyond.</p>
-      <button class="profile-chip" id="menuProfile" data-action="profile"></button>
+      <div class="menu-head">
+        <div class="logo"><span>EGGERS</span><span>KICK OFF</span></div>
+        <p class="tagline">Help Jason boot the ball to the <b>Click Wise Design</b> office&nbsp;— and way beyond.</p>
+        <button class="profile-chip" id="menuProfile" data-action="profile"></button>
+      </div>
       <div class="menu-buttons">
         <button data-action="ranked" class="big primary">⚽ Play Online<small>Ranked 10-kick round · leaderboard</small></button>
         <button data-action="career" class="big gold">🏆 Career<small>Beat the bosses · go PRO · earn the Mastery Pro Ball</small></button>
