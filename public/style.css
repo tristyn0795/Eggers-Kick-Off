@@ -545,3 +545,31 @@ body { -webkit-text-size-adjust: 100%; }
 @media (min-width: 1600px) and (min-height: 900px) {
   .hud-top, #track, #result, #distance, .menu-card, .card { zoom: 1.15; }
 }
+
+/* ---------- v1.5.1: multiplayer feed & room standings on phones ---------- */
+.feed-item { max-width: 100%; }
+@media (max-width: 560px) {
+  /* Feed: up to two single-line items, centred above the hint and toasts. */
+  #feed {
+    left: 8px; right: 8px; max-width: none; align-items: center; gap: 4px;
+    bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+  .feed-item {
+    font-size: 12px; padding: 5px 10px; border-radius: 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Room standings: a slim strip under the score bar instead of a floating box. */
+  #roomPanel {
+    top: calc(max(8px, env(safe-area-inset-top)) + 64px); bottom: auto; left: 8px; right: 8px; width: auto;
+    display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 12px; font-size: 12px;
+    overflow-x: auto; scrollbar-width: none; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  }
+  #roomPanel::-webkit-scrollbar { display: none; }
+  #roomPanel h4 { display: none; }
+  #roomPanel .rp-row {
+    flex: 0 0 auto; border-top: none; background: #f1f5f9; border-radius: 8px; padding: 2px 7px; gap: 5px; white-space: nowrap;
+  }
+  #roomPanel .rp-row span:first-child { max-width: 92px; }
+  body.room-active #distance { top: 122px; }
+  #toasts { bottom: calc(64px + env(safe-area-inset-bottom)); }
+}

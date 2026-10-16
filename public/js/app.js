@@ -248,7 +248,9 @@
     el.className = 'feed-item';
     el.innerHTML = html;
     feed.appendChild(el);
-    while (feed.children.length > 4) feed.firstChild.remove();
+    // Phones only have room for a couple of lines; desktops show more.
+    const maxItems = window.innerWidth <= 560 ? 2 : 4;
+    while (feed.children.length > maxItems) feed.firstChild.remove();
     setTimeout(() => el.remove(), 8200);
   }
 
@@ -369,6 +371,7 @@
         break;
       case 'feed': {
         if (S.player && msg.playerId === S.player.id && game.playing) break; // you already saw it land
+        if (S.room && S.room.members.some((m) => m.id === msg.playerId)) break; // shown as a room update instead
         const t = msg.target;
         const where = t ? ` — ${t.ring === 'BULLSEYE' ? '🎯 BULLSEYE' : t.ring.toLowerCase()} at ${esc(t.name)}` : '';
         addFeed(`🔥 <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${where}`);
@@ -1344,6 +1347,7 @@
     const room = S.room;
     const show = room && room.status !== 'lobby' && S.current && S.current.kind === 'room' && game.playing;
     el.classList.toggle('hidden', !show);
+    document.body.classList.toggle('room-active', !!show);
     if (!show) return;
     const me = S.player && S.player.id;
     // Your own row only moves when your result is on screen, never mid-kick.

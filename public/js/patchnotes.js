@@ -3,13 +3,15 @@ window.EK_PATCH_NOTES = [
   {
     version: '1.5.1',
     date: '16 Oct 2026',
-    title: 'Phone layout fix 📱',
+    title: 'Phone layout & multiplayer feed fixes 📱',
     sections: [
       {
         heading: '🔧 Fixes',
         items: [
           'Fixed the score bar stacking into a column on some phones right after an update. Your phone could keep an old copy of the styles; every update now loads fresh files instantly.',
           'The camera now always keeps the ball on screen during high kicks on phones.',
+          'Multiplayer on phones: room standings now sit in a slim strip under the score bar, and the live feed shows two tidy lines that no longer pile up over the hint and messages.',
+          "A roommate's big kick no longer shows twice in the feed.",
         ],
       },
     ],
