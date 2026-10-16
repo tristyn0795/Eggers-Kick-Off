@@ -291,6 +291,8 @@
         this.total = res.total != null ? res.total : this.total + (points || 0);
         if (result.distance > this.best) this.best = result.distance;
       }
+      k.henryHappy = !!target && target.name === 'Duck Pond';
+      if (k.henryHappy) setTimeout(() => sfx().quack(), 350);
       if (target) {
         sfx().target(target.mult);
         this.r.burst('confetti', result.distance, 1, 40);
@@ -307,6 +309,9 @@
         newBestKick: !!res.newBestKick,
         replay: this.mode === 'replay' ? this.cfg.title : null,
         extra: res.extra || null,
+        milestones: res.milestones || null,
+        index: k.index,
+        henry: k.henryHappy,
       });
     }
 
@@ -442,6 +447,8 @@
         ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true },
         jason: this.jasonPose(ball),
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
+        henryHappy: k.phase === 'result' && !!k.henryHappy,
+        henryBuddy: this.mode === 'attract',
         sweetWidth: k.st.sweetWidth,
         trail,
       });

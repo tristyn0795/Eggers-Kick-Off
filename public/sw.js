@@ -1,9 +1,9 @@
 /* Offline support: cache the game shell so Casual / Free Kick work with no connection. */
-const CACHE = 'eko-v1';
+const CACHE = 'eko-v2';
 const ASSETS = [
   '/', '/index.html', '/style.css', '/icon.svg', '/manifest.webmanifest',
   '/js/audio.js', '/js/render.js', '/js/game.js', '/js/app.js',
-  '/shared/physics.js', '/shared/catalog.js',
+  '/shared/physics.js', '/shared/catalog.js', '/shared/career.js', '/js/patchnotes.js',
 ];
 
 self.addEventListener('install', (e) => {

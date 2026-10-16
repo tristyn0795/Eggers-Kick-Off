@@ -17,14 +17,18 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 ### Scoring (Topgolf-style)
 - 1 point per 10 m.
 - Stop the ball inside a target for bonus points: outer ring ×1, inner ×2, **bullseye ×3**.
-  Targets: Coffee Cup (150 m), Car Park, Duck Pond, Water Tower, Pizza Shack, Billboard,
-  **Click Wise Design Office (4,000 m, 250 pts)**, Downtown, Airport, Mountain Peak, Satellite Dish (10 km).
+  Targets: Coffee Cup (150 m), Car Park, Duck Pond (home of **Henry** 🪿), Water Tower, Pizza Shack, Billboard,
+  Gas Station, **Click Wise Design Office (4,000 m, 250 pts)**, Downtown, Airport, Mountain Peak, Ski Lodge,
+  Satellite Dish, Lighthouse, Volcano, Rocket Launch Pad and the **Moon Base jackpot (17 km, 2,500 pts)**.
+  The map is spaced to match what each upgrade tier can reach.
 - A round is 10 kicks, and the **last ball scores double**.
 
 ### Progression
-- Every round earns **coins** and **XP**. Levels gate better gear.
-- **Upgrades** (5 levels each): Power Boots, Pro Ball, Sweet Spot Training, Slow-Mo Focus,
-  Aero Laces, Lucky Socks.
+- **Coins:** finishing a round pays 25 + 1 coin per 6 points. Free Kick pays 1 coin per 8 points per kick. Level-ups pay bonus
+  coins, 22 **milestones** pay one-time rewards, and Career bosses pay a bounty on your first win.
+- Every round's points also count as **XP**. Something new unlocks at almost every level up to 30.
+- **Upgrades** (10 levels each, levels 6–10 are long-haul goals): Power Boots, Pro Ball, Sweet Spot Training,
+  Slow-Mo Focus, Aero Laces, Lucky Socks.
 - **Cosmetics:** outfits (Jason's black gi is the default, plus the white competition gi, the
   Black Belt Promotion, the Click Wise tee/polo, suit, Hawaiian, astronaut…), balls (including the Eggers
   Egg) and trails.
@@ -33,6 +37,7 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 | Mode | Online? | Notes |
 |---|---|---|
 | **Play Online** | ✅ | Ranked 10-kick round. Counts for the leaderboards. |
+| **Career** | ✅ / ❌ | Wii Sports-style ladder of 12 bosses in 4 tiers. Head-to-head on the same 10 balls. Wins raise your Skill Level; reach **1,000 to go PRO** and earn the **Mastery Pro Ball**. Server-verified when signed in, local when offline. |
 | **Multiplayer Room** | ✅ | 4-letter room code or invite link. Everyone gets the same 10 juggles, wind and field, with live standings and chat. The host can turn on "level playing field" (no upgrades). |
 | **Challenge a friend** | ✅ | Share a link. Your friend plays your exact 10 kicks to try to beat your score. Leaderboard rows have "Beat it" buttons too. |
 | **Casual Round** | ❌ | Offline 10-kick round with its own local progress. |
@@ -41,6 +46,11 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
 Leaderboards: **Best Round**, **This Week**, **Longest Kick** (with replays you can watch).
 
 Offline play works with no connection: a service worker caches the game after the first visit.
+
+## Patch notes
+Players see patch notes from the **📰 Patch notes** link on the menu. They open automatically for returning players
+when there's a new version. To publish notes for a release, add an entry to the top of `public/js/patchnotes.js`
+(with a new `version`) and bump `CACHE` in `public/sw.js` so offline players get the update.
 
 ## Anti-cheat
 Physics are deterministic and shared by the browser and the server (`shared/physics.js`). The
@@ -85,7 +95,9 @@ npm test           # physics, scoring, shop, full API + multiplayer room tests
 ## Project layout
 ```
 shared/physics.js   deterministic juggle/kick/flight simulation + Topgolf scoring (client & server)
-shared/catalog.js   upgrades, cosmetics, levels, coin rewards (client & server)
+shared/catalog.js   upgrades, cosmetics, levels, coin rewards, milestones (client & server)
+shared/career.js    Career bosses, CPU kicks, skill level (client & server)
+public/js/patchnotes.js  in-game patch notes
 src/server.js       Express API + WebSocket rooms, live feed
 src/store.js        Postgres store with JSON-file fallback
 public/js/render.js canvas renderer (Jason, field, targets, landmarks, office)

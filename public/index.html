@@ -24,6 +24,7 @@
       <div class="hud-pill" id="pillKick"><span class="lbl">KICK</span><b id="hudKick">1/10</b></div>
       <div class="hud-pill" id="pillScore"><span class="lbl">SCORE</span><b id="hudScore">0</b></div>
       <div class="hud-pill hidden" id="pillBeat"><span class="lbl">TO BEAT</span><b id="hudBeat">0</b></div>
+      <div class="hud-pill vs hidden" id="pillVs"><span class="lbl" id="hudVsName">VS</span><b id="hudVs">0</b></div>
       <div class="hud-pill hidden" id="pillReplay"><span class="lbl">REPLAY</span><b id="hudReplay"></b></div>
       <div class="hud-pill"><span class="lbl">WIND</span><b id="hudWind">0</b></div>
       <button id="hudMute" class="ui hud-btn" title="Sound" aria-label="Toggle sound">🔊</button>
@@ -38,6 +39,8 @@
       <div class="res-target hidden" id="resTarget"></div>
       <div class="res-points" id="resPoints"></div>
       <div class="res-sub" id="resSub"></div>
+      <div class="res-vs hidden" id="resVs"></div>
+      <div class="res-ms hidden" id="resMs"></div>
       <div class="res-tap">tap to continue</div>
     </div>
   </div>
@@ -54,6 +57,7 @@
       <button class="profile-chip" id="menuProfile" data-action="profile"></button>
       <div class="menu-buttons">
         <button data-action="ranked" class="big primary">⚽ Play Online<small>Ranked 10-kick round · leaderboard</small></button>
+        <button data-action="career" class="big gold">🏆 Career<small>Beat the bosses · go PRO · earn the Mastery Pro Ball</small></button>
         <button data-action="rooms" class="big green">👥 Multiplayer Room<small>Play live against friends</small></button>
         <div class="row">
           <button data-action="casual">🌤️ Casual Round<small>Offline</small></button>
@@ -63,7 +67,10 @@
           <button data-action="shop">🛒 Locker &amp; Shop</button>
           <button data-action="leaderboard">🏆 Leaderboard</button>
         </div>
-        <button data-action="howto" class="link">How to play</button>
+        <div class="row links">
+          <button data-action="howto" class="link">How to play</button>
+          <button data-action="patchnotes" class="link">📰 Patch notes <span class="badge hidden" id="patchBadge">NEW</span></button>
+        </div>
       </div>
       <div id="onlineStatus" class="status"></div>
     </div>
@@ -102,6 +109,7 @@
         <button data-tab="outfit">Outfits</button>
         <button data-tab="ball">Balls</button>
         <button data-tab="trail">Trails</button>
+        <button data-tab="milestones">🏅 Milestones</button>
       </div>
       <div class="grid" id="shopGrid"></div>
     </div>
@@ -131,6 +139,15 @@
     </div>
   </section>
 
+  <!-- Career -->
+  <section id="screen-career" class="screen ui hidden">
+    <div class="card wide">
+      <button class="close" data-action="back" aria-label="Close">✕</button>
+      <h2>🏆 Career</h2>
+      <div id="careerBody"></div>
+    </div>
+  </section>
+
   <!-- How to play -->
   <section id="screen-howto" class="screen ui hidden">
     <div class="card">
@@ -150,10 +167,13 @@
         <li>The <b>Click Wise Design Office</b> sits at 4,000&nbsp;m (250&nbsp;pts). The field keeps going: Downtown, the Airport, Mountain Peak, the Satellite Dish…</li>
         <li>A round is <b>10 kicks</b>, and the <b>last ball scores double</b>.</li>
       </ul>
+      <h3>🪙 How coins work</h3>
+      <div id="coinGuide"></div>
       <h3>Progression</h3>
       <ul class="howto">
-        <li>Earn <b>coins</b> and <b>XP</b> every round. Level up to unlock new gear.</li>
-        <li>Spend coins on upgrades (power, bounce, sweet spot, slow-mo…) and on outfits, balls and trails.</li>
+        <li>Every round's points also count as <b>XP</b>. Level up to unlock new gear and higher upgrade levels.</li>
+        <li>Spend coins on upgrades (power, bounce, sweet spot, slow-mo…) up to <b>level 10</b>, and on outfits, balls and trails.</li>
+        <li><b>Career:</b> beat bosses to raise your Skill Level. Reach <b>1,000</b> to go PRO and earn the <b>Mastery Pro Ball</b>.</li>
         <li><b>Online</b> progress is saved to your kicker name. <b>Offline</b> modes keep their own local progress on this device.</li>
       </ul>
     </div>
@@ -186,6 +206,8 @@
 
   <script src="/shared/physics.js"></script>
   <script src="/shared/catalog.js"></script>
+  <script src="/shared/career.js"></script>
+  <script src="/js/patchnotes.js"></script>
   <script src="/js/audio.js"></script>
   <script src="/js/render.js"></script>
   <script src="/js/game.js"></script>

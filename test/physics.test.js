@@ -47,7 +47,8 @@ test('topgolf scoring: rings, bonus and double final ball', () => {
   const hit = P.targetFor(office.x + 1);
   assert.strictEqual(hit.ring, 'BULLSEYE');
   assert.strictEqual(hit.points, office.pts * 3);
-  assert.strictEqual(P.targetFor(3300), null);
+  assert.strictEqual(P.targetFor(2200), null);
+  assert.strictEqual(P.targetFor(3300).name, 'Gas Station');
   const fake = { distance: 1000, target: null };
   assert.strictEqual(P.scoreKick(fake, 0, 10), 100);
   assert.strictEqual(P.scoreKick(fake, 9, 10), 200);
@@ -64,4 +65,48 @@ test('shop purchases respect coins and level gates', () => {
   assert.strictEqual(C.applyPurchase(p, 'outfit:polo'), null);
   assert.strictEqual(p.equipped.outfit, 'polo');
   assert.strictEqual(C.applyEquip(p, 'ball', 'gold'), 'You do not own that yet');
+});
+
+test('milestones pay out once and level-ups pay coins', () => {
+  const p = C.newProfile();
+  p.bestKick = 1200;
+  const got = C.checkMilestones(p, { kick: { distance: 1200, label: 'GOOD', target: { name: 'Duck Pond', ring: 'OUTER RING' } } });
+  assert.deepStrictEqual(got.map((m) => m.id).sort(), ['henry', 'k1000', 'k500', 'target']);
+  assert.strictEqual(p.coins, 100 + 200 + 100 + 250);
+  assert.strictEqual(C.checkMilestones(p, { kick: { distance: 1200, label: 'GOOD' } }).length, 0);
+  assert.strictEqual(C.levelUpBonus(1, 3), C.levelUpCoins(2) + C.levelUpCoins(3));
+});
+
+test('upgrades go to level 10 and the map reaches the Moon Base', () => {
+  const p = C.newProfile();
+  p.coins = 1e6;
+  p.xp = C.xpForLevel(30);
+  for (let i = 0; i < 10; i++) assert.strictEqual(C.applyPurchase(p, 'upgrade:boots'), null);
+  assert.strictEqual(C.applyPurchase(p, 'upgrade:boots'), 'Already maxed out');
+  assert.ok(P.stats({ boots: 10 }).power > P.stats({ boots: 5 }).power);
+  assert.strictEqual(P.TARGETS[P.TARGETS.length - 1].name, 'Moon Base');
+});
+
+test('career: bosses unlock in order, wins raise skill, Pro unlocks the Mastery Pro Ball', () => {
+  const K = require('../shared/career');
+  let career = K.newCareer();
+  assert.ok(K.isUnlocked(career, 'henry'));
+  assert.ok(!K.isUnlocked(career, 'ivy'));
+  const cpu = K.cpuRound(12345, K.bossById('henry'));
+  assert.strictEqual(cpu.kicks.length, 10);
+  assert.deepStrictEqual(K.cpuRound(12345, K.bossById('henry')), cpu, 'boss scores are deterministic');
+  const win = K.applyResult(career, K.bossById('henry'), cpu.total + 1, cpu.total);
+  assert.ok(win.outcome.won && win.outcome.firstWin && win.outcome.reward > 0);
+  assert.ok(win.career.skill > 0);
+  assert.ok(K.isUnlocked(win.career, 'ivy'));
+  const lose = K.applyResult(win.career, K.bossById('henry'), 0, cpu.total);
+  assert.ok(lose.career.skill <= win.career.skill);
+  const p = C.newProfile();
+  assert.ok(!C.isOwned(p, 'ball', 'mastery'));
+  assert.strictEqual(C.applyPurchase(p, 'ball:mastery'), 'Earn this by going Pro in Career mode');
+  career = Object.assign(K.newCareer(), { skill: 990 });
+  const pro = K.applyResult(career, K.bossById('max'), 99999, 1);
+  assert.ok(pro.outcome.wentPro && pro.career.pro);
+  p.career = pro.career;
+  assert.ok(C.isOwned(p, 'ball', 'mastery'));
 });

@@ -121,7 +121,7 @@ button { font-family: inherit; }
 @keyframes slidein { from { transform: translateX(-20px); opacity: 0; } }
 @keyframes fadeout { to { opacity: 0; } }
 #toasts {
-  position: fixed; top: 215px; left: 0; right: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: fixed; bottom: 70px; flex-direction: column-reverse; left: 0; right: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none;
 }
 .toast {
@@ -295,4 +295,75 @@ code.token { display: block; background: #f6f9fb; padding: 10px; border-radius: 
   #distance { top: 120px; }
   .kick-list { grid-template-columns: repeat(5, 1fr); }
   .res-dist { font-size: 44px; }
+}
+
+/* ---------- v1.1: career, patch notes, progression ---------- */
+button.gold, .btn.gold { background: linear-gradient(180deg, #ffca28, #ffa000) !important; color: #3b2a00 !important; box-shadow: 0 4px 0 #c67c00 !important; }
+button.gold small { color: rgba(59, 42, 0, 0.75) !important; }
+.menu-buttons .row.links { justify-content: center; gap: 4px; }
+.menu-buttons .row.links > * { flex: 0 0 auto; }
+.badge { display: inline-block; background: var(--red); color: #fff; font-size: 10px; font-weight: 900; border-radius: 999px; padding: 1px 6px; vertical-align: middle; text-decoration: none; }
+.pro-badge { display: inline-block; background: linear-gradient(90deg, #ffd54f, #ffa000); color: #3b2a00; font-size: 11px; font-weight: 900; border-radius: 6px; padding: 1px 6px; vertical-align: middle; letter-spacing: 0.05em; }
+.small { font-size: 12px; }
+.hud-pill.vs b { color: #c62828; }
+.res-vs { margin-top: 8px; padding: 6px 10px; background: #fff4e5; border-radius: 10px; font-weight: 700; font-size: 14px; color: #6d4c00; }
+.res-ms { margin-top: 6px; padding: 6px 10px; background: #e3f6e4; border-radius: 10px; font-weight: 700; font-size: 14px; color: var(--green-dark); }
+.banner.pro { background: linear-gradient(90deg, #0b2f6b, #3a6fd8); color: #ffd54f; }
+.banner.milestone { background: #e3f6e4; color: var(--green-dark); }
+.versus { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 8px 0; }
+.versus > div:not(.vs-mid) { background: #f6f9fb; border-radius: 12px; padding: 8px 16px; text-align: center; min-width: 120px; }
+.versus span { display: block; font-size: 12px; font-weight: 800; color: var(--muted); }
+.versus b { font-family: var(--font-display); font-weight: 400; font-size: 26px; color: var(--blue); }
+.versus.lost > div:last-child b { color: #c62828; }
+.versus.won > div:first-child { outline: 3px solid var(--green); }
+.versus.lost > div:last-child { outline: 3px solid #c62828; }
+.vs-mid { font-family: var(--font-display); color: var(--muted); }
+.coin-breakdown, .coin-help { background: #fffaf0; border-radius: 12px; padding: 8px 12px; margin: 8px 0; }
+.coin-help { flex-basis: 100%; }
+.coin-breakdown table { margin-top: 6px; }
+.coin-breakdown td { padding: 4px 6px; }
+.coin-guide { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+.next-unlock { background: #eaf5fd; color: var(--blue-dark); border-radius: 12px; padding: 8px 12px; font-size: 14px; }
+.pips { gap: 3px; }
+.pips i.gap { margin-right: 4px; }
+.ms-summary { grid-column: 1 / -1; font-weight: 900; }
+.item.ms .ms-reward { font-weight: 900; color: #b07800; margin-top: auto; }
+.item.ms.equipped .ms-reward { color: var(--green-dark); }
+
+.career-head { display: grid; grid-template-columns: 1.1fr 1fr auto; gap: 14px; align-items: center; margin: 4px 0 8px; }
+.skill-box .skill-num { font-family: var(--font-display); font-size: 48px; color: var(--blue); line-height: 1; }
+.pro-bar { position: relative; height: 14px; background: #eef3f7; border-radius: 999px; overflow: hidden; margin: 6px 0; }
+.pro-bar > div { height: 100%; background: linear-gradient(90deg, var(--green), #ffc107); border-radius: 999px; }
+.pro-bar span { position: absolute; right: 8px; top: -1px; font-size: 10px; font-weight: 900; color: var(--muted); }
+.skill-graph { width: 100%; height: 80px; background: #f6f9fb; border-radius: 10px; }
+.skill-graph .skill-line { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linejoin: round; }
+.skill-graph .pro-line { stroke: #ffa000; stroke-dasharray: 4 4; stroke-width: 1.5; }
+.skill-graph .pro-label { font-size: 10px; font-weight: 900; fill: #ffa000; }
+.mastery { display: flex; align-items: center; gap: 8px; background: #f6f9fb; border-radius: 12px; padding: 8px 10px; }
+.mastery.earned { background: linear-gradient(90deg, #0b2f6b, #3a6fd8); color: #fff; }
+.mastery.earned .muted { color: #ffd54f; }
+.mastery canvas { width: 72px; height: 72px; }
+.boss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
+.boss { display: flex; align-items: center; gap: 10px; border: 2px solid var(--line); border-radius: 14px; padding: 10px; }
+.boss.beaten { border-color: var(--green); background: #f4fbf4; }
+.boss.locked { opacity: 0.55; }
+.boss-avatar { font-size: 34px; width: 54px; height: 54px; display: grid; place-items: center; background: #eef3f7; border-radius: 14px; flex: none; }
+.boss-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.boss-info .taunt { font-size: 12px; color: var(--muted); }
+.boss .btn { flex: none; padding: 8px 12px !important; font-size: 14px !important; }
+.tag { align-self: flex-start; font-size: 11px; font-weight: 900; background: #eef3f7; color: var(--muted); border-radius: 6px; padding: 1px 6px; }
+.tag.won { background: var(--green); color: #fff; }
+.tag.next { background: var(--gold); color: #3b2a00; }
+.patch-notes { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.patch { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+.patch.old { opacity: 0.75; }
+.patch h3 { margin: 4px 0; }
+.patch h4 { margin: 10px 0 2px; }
+.patch ul { margin: 2px 0; padding-left: 20px; }
+.patch li { margin: 3px 0; }
+.patch-head { display: flex; gap: 8px; align-items: center; }
+.patch-ver { background: var(--blue); color: #fff; font-weight: 900; border-radius: 6px; padding: 1px 8px; font-size: 13px; }
+@media (max-width: 720px) {
+  .career-head { grid-template-columns: 1fr; }
+  .boss-grid { grid-template-columns: 1fr; }
 }

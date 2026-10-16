@@ -94,6 +94,29 @@ test('full online flow: profile, round, leaderboard, shop, challenge', async () 
   assert.strictEqual(replay.body.name, 'Test Kicker');
 });
 
+test('career match is verified by the server', async () => {
+  const K = require('../shared/career');
+  const token = (await api('/api/player', { name: 'Career Kid' })).body.token;
+  assert.strictEqual((await api('/api/round/start', { career: 'ivy' }, token)).status, 403, 'Ivy is locked until Henry is beaten');
+  const start = await api('/api/round/start', { career: 'henry' }, token);
+  assert.strictEqual(start.status, 200);
+  const { roundId, baseSeed, upgrades } = start.body;
+  let last;
+  for (let i = 0; i < 10; i++) {
+    const frame = bestFrame(P.kickSeed(baseSeed, i), upgrades);
+    last = await api('/api/round/kick', { roundId, index: i, frame }, token);
+  }
+  const c = last.body.summary.career;
+  assert.strictEqual(c.cpuTotal, K.cpuRound(baseSeed, K.bossById('henry')).total);
+  assert.strictEqual(c.won, last.body.total > c.cpuTotal);
+  assert.ok(c.won, 'perfect play beats Henry');
+  assert.ok(last.body.player.career.skill > 0);
+  assert.ok(last.body.player.career.beaten.includes('henry'));
+  assert.ok(last.body.summary.coinBreakdown.career > 0);
+  assert.ok(last.body.player.milestones.length > 0, 'milestones earned along the way');
+  assert.strictEqual((await api('/api/round/start', { career: 'ivy' }, token)).status, 200, 'Ivy unlocked');
+});
+
 test('multiplayer room: create, join, start, live kicks and final standings', async () => {
   const a = (await api('/api/player', { name: 'Host Hannah' })).body.token;
   const b = (await api('/api/player', { name: 'Guest Gus' })).body.token;

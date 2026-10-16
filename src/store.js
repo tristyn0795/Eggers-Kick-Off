@@ -66,6 +66,9 @@ class PgStore {
         finished_at TIMESTAMPTZ
       );
       CREATE INDEX IF NOT EXISTS rounds_finished_at ON rounds (finished_at) WHERE finished;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS milestones JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE players ADD COLUMN IF NOT EXISTS career JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE rounds ADD COLUMN IF NOT EXISTS career TEXT;
     `);
   }
 
@@ -87,6 +90,8 @@ class PgStore {
       bestKickRoundId: r.best_kick_round_id,
       bestKickIndex: r.best_kick_index,
       roundsPlayed: r.rounds_played,
+      milestones: r.milestones || [],
+      career: r.career || {},
     };
   }
 
@@ -102,6 +107,7 @@ class PgStore {
       finished: r.finished,
       room: r.room,
       challengeOf: r.challenge_of,
+      career: r.career || null,
       createdAt: new Date(r.created_at).getTime(),
       finishedAt: r.finished_at ? new Date(r.finished_at).getTime() : null,
     };
@@ -137,11 +143,11 @@ class PgStore {
       await this.pool.query(
         `UPDATE players SET name=$2, name_key=$3, coins=$4, xp=$5, upgrades=$6, owned=$7, equipped=$8,
            best_round=$9, best_round_id=$10, best_kick=$11, best_kick_round_id=$12, best_kick_index=$13,
-           rounds_played=$14
+           rounds_played=$14, milestones=$15, career=$16
          WHERE id=$1`,
         [p.id, p.name, p.nameKey, p.coins, p.xp, JSON.stringify(p.upgrades), JSON.stringify(p.owned),
           JSON.stringify(p.equipped), p.bestRound, p.bestRoundId, p.bestKick, p.bestKickRoundId,
-          p.bestKickIndex, p.roundsPlayed]
+          p.bestKickIndex, p.roundsPlayed, JSON.stringify(p.milestones || []), JSON.stringify(p.career || {})]
       );
     } catch (e) {
       if (e.code === '23505') throw new NameTakenError();
@@ -151,10 +157,10 @@ class PgStore {
 
   async createRound(r) {
     await this.pool.query(
-      `INSERT INTO rounds (id, player_id, base_seed, upgrades, kicks, score, finished, room, challenge_of)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      `INSERT INTO rounds (id, player_id, base_seed, upgrades, kicks, score, finished, room, challenge_of, career)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [r.id, r.playerId, r.baseSeed, JSON.stringify(r.upgrades), JSON.stringify(r.kicks), r.score,
-        r.finished, r.room, r.challengeOf]
+        r.finished, r.room, r.challengeOf, r.career || null]
     );
     return r;
   }

@@ -72,6 +72,10 @@
       const notes = mult >= 3 ? [523, 659, 784, 1047] : mult === 2 ? [523, 659, 784] : [523, 659];
       notes.forEach((n, i) => tone(n, 0.18, 'triangle', 0.15, null, i * 0.09));
     },
+    quack() {
+      tone(520, 0.12, 'sawtooth', 0.09, 380);
+      tone(500, 0.14, 'sawtooth', 0.09, 340, 0.17);
+    },
     coin() { tone(988, 0.08, 'square', 0.08, null); tone(1319, 0.2, 'square', 0.08, null, 0.08); },
     click() { tone(600, 0.04, 'sine', 0.06); },
     levelUp() { [392, 523, 659, 784, 1047].forEach((n, i) => tone(n, 0.2, 'triangle', 0.14, null, i * 0.1)); },

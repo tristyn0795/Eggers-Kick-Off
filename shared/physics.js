@@ -22,6 +22,7 @@
   const BASE_SPEED = 95;
   const MAX_FLIGHT_FRAMES = 60 * 240;
   const KICKS_PER_ROUND = 10;
+  const FIELD_LENGTH = 40000;
 
   // Topgolf-style targets on the field. Points are awarded for where the ball
   // comes to rest. The Click Wise Design Office sits at the classic 4,000 m.
@@ -32,11 +33,17 @@
     { x: 1200, name: 'Water Tower', pts: 50, color: '#43a047' },
     { x: 1800, name: 'Pizza Shack', pts: 75, color: '#00acc1' },
     { x: 2600, name: 'Billboard', pts: 100, color: '#8e24aa' },
+    { x: 3300, name: 'Gas Station', pts: 150, color: '#f4511e' },
     { x: 4000, name: 'Click Wise Design Office', pts: 250, color: '#047dc3', office: true },
     { x: 5200, name: 'Downtown', pts: 300, color: '#d81b60' },
     { x: 6500, name: 'Airport', pts: 400, color: '#546e7a' },
-    { x: 8000, name: 'Mountain Peak', pts: 600, color: '#6d4c41' },
-    { x: 10000, name: 'Satellite Dish', pts: 1000, color: '#ffd600' },
+    { x: 8000, name: 'Mountain Peak', pts: 550, color: '#6d4c41' },
+    { x: 9200, name: 'Ski Lodge', pts: 650, color: '#29b6f6' },
+    { x: 10500, name: 'Satellite Dish', pts: 800, color: '#ffd600' },
+    { x: 12000, name: 'Lighthouse', pts: 1000, color: '#c62828' },
+    { x: 13500, name: 'Volcano', pts: 1250, color: '#ff6d00' },
+    { x: 15000, name: 'Rocket Launch Pad', pts: 1600, color: '#5e35b1' },
+    { x: 17000, name: 'Moon Base', pts: 2500, color: '#78909c', jackpot: true },
   ];
   const RINGS = [
     { name: 'BULLSEYE', mult: 3 },
@@ -71,24 +78,31 @@
     return hashSeed(baseSeed >>> 0, index | 0);
   }
 
+  const MAX_UPGRADE_LEVEL = 10;
+
   function clampLevel(v) {
     v = v | 0;
-    return v < 0 ? 0 : v > 5 ? 5 : v;
+    return v < 0 ? 0 : v > MAX_UPGRADE_LEVEL ? MAX_UPGRADE_LEVEL : v;
+  }
+
+  // Levels 1-5 give the full step `a`; levels 6-10 give the smaller step `b`.
+  function tiered(level, a, b) {
+    return (level < 5 ? level : 5) * a + (level > 5 ? level - 5 : 0) * b;
   }
 
   function stats(upgrades) {
     const u = upgrades || {};
     const lv = (k) => clampLevel(u[k]);
     return {
-      power: 1 + 0.06 * lv('boots'),
-      sweetWidth: 0.3 * (1 + 0.15 * lv('training')),
+      power: 1 + tiered(lv('boots'), 0.06, 0.04),
+      sweetWidth: 0.3 * (1 + tiered(lv('training'), 0.15, 0.08)),
       reach: 2.5,
-      restitution: 0.55 + 0.04 * lv('ball'),
-      friction: 0.82 + 0.02 * lv('ball'),
-      roll: 5 - 0.5 * lv('ball'),
+      restitution: 0.55 + tiered(lv('ball'), 0.04, 0.01),
+      friction: 0.82 + tiered(lv('ball'), 0.02, 0.004),
+      roll: 5 - tiered(lv('ball'), 0.5, 0.15),
       luck: lv('luck'),
-      juggleG: 22 * (1 - 0.07 * lv('focus')),
-      drag: 0.008 * (1 - 0.12 * lv('aero')),
+      juggleG: 22 * (1 - tiered(lv('focus'), 0.07, 0.03)),
+      drag: 0.008 * (1 - tiered(lv('aero'), 0.12, 0.05)),
     };
   }
 
@@ -100,10 +114,10 @@
   function fieldObjects(seed, luck) {
     const r = mulberry32(hashSeed(seed, 0xF1E1D));
     const out = [];
-    const pPad = 0.22 + 0.04 * (luck | 0);
-    const pPuddle = 0.18 - 0.025 * (luck | 0);
+    const pPad = 0.22 + tiered(luck | 0, 0.04, 0.015);
+    const pPuddle = 0.18 - tiered(luck | 0, 0.025, 0.008);
     let x = 120 + r() * 120;
-    while (x < 12000) {
+    while (x < FIELD_LENGTH) {
       const roll = r();
       const variant = Math.floor(r() * 4);
       let type = 'decor';
@@ -342,7 +356,7 @@
 
   return {
     DT, G, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
-    KICKS_PER_ROUND, TARGETS, RINGS,
+    KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,
     timingLabel,

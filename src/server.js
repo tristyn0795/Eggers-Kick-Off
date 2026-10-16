@@ -7,6 +7,7 @@ const { WebSocketServer } = require('ws');
 
 const P = require('../shared/physics');
 const C = require('../shared/catalog');
+const K = require('../shared/career');
 const { createStore, NameTakenError } = require('./store');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -49,6 +50,8 @@ function publicPlayer(p) {
     bestRound: p.bestRound,
     bestKick: p.bestKick,
     roundsPlayed: p.roundsPlayed,
+    milestones: p.milestones || [],
+    career: K.normalize(p.career),
   };
 }
 
@@ -166,8 +169,13 @@ async function main() {
     return { player: publicPlayer(p) };
   })));
 
-  async function startRound(player, { challengeOf = null, room = null, baseSeed = null, fair = false } = {}) {
+  async function startRound(player, { challengeOf = null, room = null, baseSeed = null, fair = false, career = null } = {}) {
     let seed = baseSeed;
+    if (career) {
+      if (!K.bossById(career)) throw new HttpError(400, 'Unknown boss');
+      if (!K.isUnlocked(K.normalize(player.career), career)) throw new HttpError(403, 'Beat the previous boss first');
+      challengeOf = null;
+    }
     if (challengeOf) {
       const ch = await store.getRound(String(challengeOf));
       if (!ch || !ch.finished) throw new HttpError(404, 'That challenge no longer exists');
@@ -183,14 +191,16 @@ async function main() {
       finished: false,
       room,
       challengeOf: challengeOf || null,
+      career: career || null,
     };
     await store.createRound(round);
     return round;
   }
 
   app.post('/api/round/start', auth, rateLimit({ windowMs: 60e3, max: 30 }), wrap(async (req) => {
-    const round = await startRound(req.player, { challengeOf: req.body && req.body.challengeOf });
-    return { roundId: round.id, baseSeed: round.baseSeed, upgrades: round.upgrades, kicks: KICKS };
+    const body = req.body || {};
+    const round = await startRound(req.player, { challengeOf: body.challengeOf, career: body.career ? String(body.career) : null });
+    return { roundId: round.id, baseSeed: round.baseSeed, upgrades: round.upgrades, kicks: KICKS, career: round.career };
   }));
 
   app.post('/api/round/kick', auth, wrap(async (req) => {
@@ -223,6 +233,7 @@ async function main() {
           player.bestKickRoundId = round.id;
           player.bestKickIndex = index;
         }
+        const milestones = C.checkMilestones(player, { kick: result });
         if (done) {
           round.finished = true;
           round.finishedAt = Date.now();
@@ -231,6 +242,9 @@ async function main() {
           player.coins += coins;
           player.xp += round.score;
           player.roundsPlayed += 1;
+          const levelAfter = C.levelFromXp(player.xp);
+          const levelBonus = C.levelUpBonus(levelBefore, levelAfter);
+          player.coins += levelBonus;
           const newBestRound = round.score > player.bestRound;
           if (newBestRound) {
             player.bestRound = round.score;
@@ -242,26 +256,52 @@ async function main() {
             const owner = ch && (await store.getPlayer(ch.playerId));
             if (ch) challenge = { name: owner ? owner.name : 'Someone', score: ch.score, won: round.score > ch.score };
           }
+          let career = null;
+          if (round.career) {
+            const boss = K.bossById(round.career);
+            const cpu = K.cpuRound(round.baseSeed, boss);
+            const applied = K.applyResult(player.career, boss, round.score, cpu.total);
+            player.career = applied.career;
+            player.coins += applied.outcome.reward;
+            career = applied.outcome;
+          }
+          const roundMilestones = C.checkMilestones(player, { roundScore: round.score });
           summary = {
             score: round.score, coins, xp: round.score, newBestRound,
-            levelBefore, levelAfter: C.levelFromXp(player.xp), challenge,
+            levelBefore, levelAfter, levelBonus, challenge, career,
+            coinBreakdown: {
+              points: Math.floor(round.score / C.POINTS_PER_COIN),
+              completion: C.ROUND_COMPLETION_COINS,
+              levelBonus,
+              career: career ? career.reward : 0,
+              milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
+            },
+            milestones: roundMilestones,
+            nextUnlock: C.nextUnlocks(levelAfter),
             ranks: { round: await store.rankOf('round', player), kick: await store.rankOf('kick', player) },
           };
         }
         await store.saveRound(round);
         await store.savePlayer(player);
-        return { round, player, result, points, done, summary, newBestKick };
+        return { round, player, result, points, done, summary, newBestKick, milestones };
       });
     });
 
-    const { round, player, result, points, done, summary, newBestKick } = out;
-    if (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office))) {
-      broadcastAll({ t: 'feed', name: player.name, distance: result.distance, target: result.target, label: result.label });
-    }
-    if (round.room) roomKick(round.room, player, round, points, result);
+    const { round, player, result, points, done, summary, newBestKick, milestones } = out;
+    // Hold the news back until the kick has finished playing on the kicker's screen,
+    // so nobody (the kicker included) sees a result while the ball is still flying.
+    const ticks = P.SWING_FRAMES + Math.min(25, result.flightFrames) + Math.min(45, Math.max(0, result.flightFrames - 25)) / 2
+      + Math.max(0, result.flightFrames - 70) / 3.2;
+    const revealMs = Math.min(30000, Math.round((ticks / 60) * 1000) + 300);
+    setTimeout(() => {
+      if (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office))) {
+        broadcastAll({ t: 'feed', playerId: player.id, name: player.name, distance: result.distance, target: result.target, label: result.label });
+      }
+      if (round.room) roomKick(round.room, player, round, points, result);
+    }, revealMs);
 
     return {
-      index, points, total: round.score, done, summary, newBestKick,
+      index, points, total: round.score, done, summary, newBestKick, milestones,
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,
         quality: result.quality, target: result.target, whiff: result.whiff,
@@ -379,7 +419,7 @@ async function main() {
     const room = rooms.get(code);
     if (!room) return;
     const m = room.members.get(player.id);
-    if (!m || m.roundId !== round.id) return;
+    if (!m || m.roundId !== round.id || round.kicks.length < m.kicks) return;
     m.total = round.score;
     m.kicks = round.kicks.length;
     m.done = round.finished;

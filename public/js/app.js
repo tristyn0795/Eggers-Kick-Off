@@ -3,6 +3,7 @@
   'use strict';
   const P = window.EKPhysics;
   const C = window.EKCatalog;
+  const EKCareer = window.EKCareer;
   const EK = window.EK;
   const sfx = EK.sfx;
 
@@ -58,6 +59,11 @@
       $('#hudReplay').textContent = opts.replay || '';
       $('#pillBeat').classList.toggle('hidden', !opts.beat);
       $('#hudBeat').textContent = opts.beat ? fmt(opts.beat) : '';
+      $('#pillVs').classList.toggle('hidden', !opts.vs);
+      if (opts.vs) {
+        $('#hudVsName').textContent = `${opts.vs.avatar} ${opts.vs.name.split(' ')[0].toUpperCase()}`;
+        $('#hudVs').textContent = '0';
+      }
       $('#hudMute').textContent = sfx.muted ? '🔇' : '🔊';
       this.last = {};
       this.range = 0;
@@ -90,7 +96,7 @@
       this.track(Math.max(0, s.ballX));
     },
     track(x) {
-      const range = Math.min(11000, Math.max(4500, Math.ceil((x + 400) / 1000) * 1000));
+      const range = Math.min(18000, Math.max(4500, Math.ceil((x + 400) / 1000) * 1000));
       if (range !== this.range) {
         this.range = range;
         $('#trackMarks').innerHTML = P.TARGETS.filter((t) => t.x <= range).map((t) => (t.office
@@ -120,6 +126,13 @@
       if (r.extra) sub.push(esc(r.extra));
       if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
       $('#resSub').innerHTML = sub.join(' · ');
+      const ms = r.milestones || [];
+      $('#resMs').classList.toggle('hidden', !ms.length);
+      $('#resMs').innerHTML = ms.map((m) => `🏅 <b>${esc(m.name)}</b> +${fmt(m.reward)} 🪙`).join('<br>');
+      if (r.henry) toast('🪿 Henry loves it! QUACK!', 'good');
+      const vs = this.onResult ? this.onResult(r) : null;
+      $('#resVs').classList.toggle('hidden', !vs);
+      if (vs) $('#resVs').innerHTML = vs;
       $('#result').classList.remove('hidden');
       $('#distance').classList.add('hidden');
       this.last.flight = false;
@@ -255,6 +268,7 @@
         renderStatus();
         break;
       case 'feed': {
+        if (S.player && msg.playerId === S.player.id && game.playing) break; // you already saw it land
         const t = msg.target;
         const where = t ? ` — ${t.ring === 'BULLSEYE' ? '🎯 BULLSEYE' : t.ring.toLowerCase()} at ${esc(t.name)}` : '';
         addFeed(`🔥 <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${where}`);
@@ -338,13 +352,13 @@
     const chip = $('#menuProfile');
     if (S.player) {
       const p = S.player;
-      chip.innerHTML = `👤 ${esc(p.name)} · Lv ${p.level} · <span class="coins">🪙 ${fmt(p.coins)}</span>`;
+      chip.innerHTML = `👤 ${esc(p.name)}${p.career && p.career.pro ? ' <span class="pro-badge">PRO</span>' : ''} · Lv ${p.level} · <span class="coins">🪙 ${fmt(p.coins)}</span>`;
     } else if (S.online) {
       const o = S.offline;
       chip.innerHTML = `👤 Create your kicker name · <span class="muted">offline Lv ${C.levelFromXp(o.xp)}</span>`;
     } else {
       const o = S.offline;
-      chip.innerHTML = `📴 Offline profile · Lv ${C.levelFromXp(o.xp)} · <span class="coins">🪙 ${fmt(o.coins)}</span>`;
+      chip.innerHTML = `📴 Offline profile${o.career && o.career.pro ? ' <span class="pro-badge">PRO</span>' : ''} · Lv ${C.levelFromXp(o.xp)} · <span class="coins">🪙 ${fmt(o.coins)}</span>`;
     }
     $$('[data-action="ranked"], [data-action="rooms"]').forEach((b) => { b.disabled = !S.online; });
     renderStatus();
@@ -386,12 +400,52 @@
     }
   }
 
+  /** Career match vs a boss. Online (server-verified) when signed in, otherwise on the offline profile. */
+  async function startCareer(bossId) {
+    const boss = EKCareer.bossById(bossId);
+    if (!boss) return;
+    if (careerOnline()) {
+      try {
+        const r = await api('/api/round/start', { career: boss.id });
+        beginOnlineRound({ kind: 'career', roundId: r.roundId, baseSeed: r.baseSeed, upgrades: r.upgrades, boss });
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    } else {
+      startOffline(P.KICKS_PER_ROUND, boss);
+    }
+  }
+
+  function careerOnline() {
+    return !!(S.online && S.player);
+  }
+
+  /** Attach the boss's kicks to the current round; they're revealed one by one after each of yours lands. */
+  function attachBoss(cur, boss, baseSeed) {
+    cur.boss = boss;
+    cur.cpu = EKCareer.cpuRound(baseSeed, boss);
+    cur.cpuTotal = 0;
+  }
+
+  hud.onResult = (r) => {
+    renderRoomPanel();
+    const cur = S.current;
+    if (!cur || !cur.cpu || r.index == null) return null;
+    const ck = cur.cpu.kicks[r.index];
+    cur.cpuTotal = cur.cpu.kicks.slice(0, r.index + 1).reduce((n, k) => n + k.points, 0);
+    $('#hudVs').textContent = fmt(cur.cpuTotal);
+    const lead = (game.total || 0) - cur.cpuTotal;
+    const state = lead > 0 ? `You lead by ${fmt(lead)}` : lead < 0 ? `You trail by ${fmt(-lead)}` : 'All square';
+    return `${cur.boss.avatar} ${esc(cur.boss.name)}: ${fmtM(ck.distance)} <small>(+${fmt(ck.points)})</small><br><b>${state}</b>`;
+  };
+
   function beginOnlineRound(opts) {
     let chain = Promise.resolve();
-    const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], challenge: opts.challenge || null };
+    const cur = { kind: opts.kind, roundId: opts.roundId, kicks: [], milestones: [], challenge: opts.challenge || null };
+    if (opts.boss) attachBoss(cur, opts.boss, opts.baseSeed);
     S.current = cur;
     hideScreens();
-    hud.show('play', { beat: opts.beat });
+    hud.show('play', { beat: opts.beat, vs: opts.boss });
     game.startRound({
       baseSeed: opts.baseSeed,
       upgrades: opts.upgrades,
@@ -403,6 +457,7 @@
         return p.then((res) => {
           S.player = res.player;
           cur.kicks.push({ d: res.result.distance, p: res.points, t: res.result.target });
+          cur.milestones.push(...(res.milestones || []));
           return res;
         });
       },
@@ -418,6 +473,7 @@
         }
         const summary = Object.assign({ kind: opts.kind, roundId: opts.roundId, kicks: cur.kicks }, res.summary || { score: res.total });
         summary.challenge = cur.challenge ? Object.assign({}, cur.challenge, summary.challenge) : null;
+        summary.kickMilestones = cur.milestones;
         showEnd(summary);
       },
       onAbort: (msg) => {
@@ -428,16 +484,18 @@
     renderRoomPanel();
   }
 
-  function startOffline(kicks) {
+  function startOffline(kicks, boss) {
     const prof = S.offline;
     const endless = kicks === Infinity;
-    const cur = { kind: endless ? 'freekick' : 'casual', kicks: [] };
+    const baseSeed = (Math.random() * 2 ** 32) >>> 0;
+    const cur = { kind: boss ? 'career' : endless ? 'freekick' : 'casual', kicks: [], milestones: [], offline: true };
+    if (boss) attachBoss(cur, boss, baseSeed);
     S.current = cur;
     let total = 0;
     hideScreens();
-    hud.show('play');
+    hud.show('play', { vs: boss });
     game.startRound({
-      baseSeed: (Math.random() * 2 ** 32) >>> 0,
+      baseSeed,
       upgrades: prof.upgrades,
       equipped: prof.equipped,
       kicks,
@@ -446,6 +504,8 @@
         cur.kicks.push({ d: sim.distance, p: pts, t: sim.target });
         const newBestKick = sim.distance > prof.bestKick;
         if (newBestKick) prof.bestKick = sim.distance;
+        const milestones = C.checkMilestones(prof, { kick: sim });
+        cur.milestones.push(...milestones);
         let extra = null;
         if (endless) {
           const lvBefore = C.levelFromXp(prof.xp);
@@ -453,12 +513,16 @@
           prof.coins += coins;
           prof.xp += Math.floor(pts / 2);
           extra = `+${coins} 🪙`;
-          if (C.levelFromXp(prof.xp) > lvBefore) {
-            setTimeout(() => { sfx.levelUp(); toast(`Level up! You're now level ${C.levelFromXp(prof.xp)}`, 'good'); }, 400);
+          const lvAfter = C.levelFromXp(prof.xp);
+          if (lvAfter > lvBefore) {
+            const bonus = C.levelUpBonus(lvBefore, lvAfter);
+            prof.coins += bonus;
+            extra += ` · ⬆️ Level ${lvAfter}! +${fmt(bonus)} 🪙`;
+            setTimeout(() => sfx.levelUp(), 400);
           }
         }
         saveOffline();
-        return { points: pts, total, newBestKick, extra, done: false };
+        return { points: pts, total, newBestKick, extra, milestones, done: false };
       },
       onEnd: () => {
         const levelBefore = C.levelFromXp(prof.xp);
@@ -466,17 +530,39 @@
         prof.coins += coins;
         prof.xp += total;
         prof.roundsPlayed += 1;
+        const levelAfter = C.levelFromXp(prof.xp);
+        const levelBonus = C.levelUpBonus(levelBefore, levelAfter);
+        prof.coins += levelBonus;
         const newBestRound = total > prof.bestRound;
         if (newBestRound) prof.bestRound = total;
+        let career = null;
+        if (boss) {
+          const applied = EKCareer.applyResult(prof.career, boss, total, cur.cpu.total);
+          prof.career = applied.career;
+          prof.coins += applied.outcome.reward;
+          career = applied.outcome;
+        }
+        const roundMilestones = C.checkMilestones(prof, { roundScore: total });
         saveOffline();
-        showEnd({ kind: 'casual', kicks: cur.kicks, score: total, coins, xp: total, newBestRound, levelBefore, levelAfter: C.levelFromXp(prof.xp) });
+        showEnd({
+          kind: cur.kind, offline: true, kicks: cur.kicks, score: total, coins, xp: total, newBestRound,
+          levelBefore, levelAfter, levelBonus, career, milestones: roundMilestones, kickMilestones: cur.milestones,
+          coinBreakdown: {
+            points: Math.floor(total / C.POINTS_PER_COIN), completion: C.ROUND_COMPLETION_COINS, levelBonus,
+            career: career ? career.reward : 0, milestones: roundMilestones.reduce((n, m) => n + m.reward, 0),
+          },
+          nextUnlock: C.nextUnlocks(levelAfter),
+        });
       },
       onAbort: (msg) => { toast(msg, 'error'); goMenu(); },
     });
   }
 
   function celebrate(summary) {
-    if (summary.levelAfter > summary.levelBefore) {
+    if (summary.career && summary.career.wentPro) {
+      sfx.levelUp();
+      toast('⭐ You went PRO! Mastery Pro Ball unlocked!', 'good');
+    } else if (summary.levelAfter > summary.levelBefore) {
       sfx.levelUp();
       toast(`Level up! You're now level ${summary.levelAfter}`, 'good');
     } else {
@@ -484,38 +570,73 @@
     }
   }
 
+  function coinBreakdownHtml(s) {
+    const b = s.coinBreakdown;
+    if (!b) return '';
+    const kickMs = (s.kickMilestones || []).reduce((n, m) => n + m.reward, 0);
+    const rows = [
+      [`Points (${fmt(s.score)} ÷ ${C.POINTS_PER_COIN})`, b.points],
+      ['Round completion bonus', b.completion],
+      [`Level-up bonus`, b.levelBonus],
+      ['Career first-win bounty', b.career],
+      ['Milestones', b.milestones + kickMs],
+    ].filter(([, v]) => v > 0);
+    const total = rows.reduce((n, [, v]) => n + v, 0);
+    return `<details class="coin-breakdown" open><summary>🪙 +${fmt(total)} coins — how you earned them</summary>
+      <table>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="val">+${fmt(v)}</td></tr>`).join('')}</table></details>`;
+  }
+
   function showEnd(s) {
     hud.hide();
-    game.attract(activeProfileFor(s.kind).equipped);
+    game.attract(activeProfileFor(s).equipped);
     celebrate(s);
-    const online = s.kind === 'ranked' || s.kind === 'challenge';
+    const online = !s.offline && (s.kind === 'ranked' || s.kind === 'challenge' || s.kind === 'career');
     const kicks = (s.kicks || []).map((k, i) => `<div class="${k.t ? 'tgt' : ''}" title="${k.t ? esc(k.t.name || k.t) : ''}">#${i + 1}<b>${fmt(k.d)}m</b>+${fmt(k.p)}</div>`).join('');
     const best = (s.kicks || []).reduce((m, k) => Math.max(m, k.d), 0);
     let banners = '';
+    let title = s.kind === 'casual' ? 'Casual round complete' : s.kind === 'challenge' ? 'Challenge complete' : 'Round complete';
+    const c = s.career;
+    if (c) {
+      title = c.won ? `${c.boss.avatar} You beat ${c.boss.name}!` : `${c.boss.avatar} ${c.boss.name} wins this time`;
+      const diff = c.skillAfter - c.skillBefore;
+      banners += `<div class="versus ${c.won ? 'won' : 'lost'}">
+          <div><span>You</span><b>${fmt(c.playerScore)}</b></div><div class="vs-mid">VS</div>
+          <div><span>${esc(c.boss.name)}</span><b>${fmt(c.cpuTotal)}</b></div></div>
+        <div class="banner ${diff >= 0 ? 'green' : 'blue'}">Skill Level ${fmt(c.skillBefore)} → <b>${fmt(c.skillAfter)}</b> (${diff >= 0 ? '+' : ''}${diff})</div>`;
+      if (c.wentPro) banners += '<div class="banner pro">⭐ YOU WENT PRO! The <b>Mastery Pro Ball</b> is now in your locker.</div>';
+      if (c.firstWin && c.nextBoss) banners += `<div class="banner">🔓 New challenger: ${c.nextBoss.avatar} ${esc(c.nextBoss.name)}</div>`;
+    }
     if (s.challenge) {
       banners += s.challenge.won
         ? `<div class="banner green">🏆 You beat ${esc(s.challenge.name)}'s ${fmt(s.challenge.score)}!</div>`
         : `<div class="banner blue">So close! ${esc(s.challenge.name)} scored ${fmt(s.challenge.score)}.</div>`;
     }
     if (s.newBestRound) banners += '<div class="banner">★ New personal best round!</div>';
-    if (s.levelAfter > s.levelBefore) banners += `<div class="banner green">⬆️ Level ${s.levelAfter}! New gear may be unlocked in the shop.</div>`;
+    if (s.levelAfter > s.levelBefore) banners += `<div class="banner green">⬆️ Level ${s.levelAfter}!</div>`;
+    const ms = (s.kickMilestones || []).concat(s.milestones || []);
+    if (ms.length) banners += `<div class="banner milestone">🏅 ${ms.map((m) => `${esc(m.name)} <small>+${fmt(m.reward)}</small>`).join(' · ')}</div>`;
     const rank = online && s.ranks && s.ranks.round ? `<div class="reward rank"><b>#${s.ranks.round}</b>All-time rank</div>` : '';
+    const nu = s.nextUnlock;
+    const next = nu ? `<div class="next-unlock">🔓 <b>Next unlock at level ${nu.level}:</b> ${nu.items.map(esc).join(', ')}</div>` : '';
     $('#endBody').innerHTML = `
-      <div class="end-title">${s.kind === 'casual' ? 'Casual round complete' : s.kind === 'challenge' ? 'Challenge complete' : 'Round complete'}</div>
+      <div class="end-title">${esc(title)}</div>
       <div class="end-score">${fmt(s.score)}</div>
       <div class="end-sub">points · longest kick ${fmtM(best)}</div>
       ${banners}
       <div class="kick-list">${kicks}</div>
       <div class="rewards">
-        <div class="reward"><b>+${fmt(s.coins)}</b>coins</div>
+        <div class="reward"><b>+${fmt(s.coins)}</b>round coins</div>
         <div class="reward xp"><b>+${fmt(s.xp)}</b>XP</div>
         ${rank}
       </div>
+      ${coinBreakdownHtml(s)}
+      ${next}
       <div class="actions">
-        <button class="btn primary" data-end="again">⚽ Play again</button>
-        ${online && s.roundId ? '<button class="btn green" data-end="challenge">⚔️ Challenge a friend</button>' : ''}
+        <button class="btn primary" data-end="again">${c ? (c.won && c.nextBoss ? `⚔️ Next: ${esc(c.nextBoss.name)}` : '🔁 Rematch') : '⚽ Play again'}</button>
+        ${c ? '<button class="btn gold" data-end="career">🏆 Career</button>' : ''}
+        ${online && s.roundId && !c ? '<button class="btn green" data-end="challenge">⚔️ Challenge a friend</button>' : ''}
         <button class="btn" data-end="shop">🛒 Shop</button>
-        ${online ? '<button class="btn" data-end="leaderboard">🏆 Leaderboard</button>' : ''}
+        ${online && !c ? '<button class="btn" data-end="leaderboard">🏆 Leaderboard</button>' : ''}
         <button class="btn" data-end="menu">Menu</button>
       </div>`;
     $('#endBody').onclick = (e) => {
@@ -524,19 +645,21 @@
       sfx.click();
       const a = b.dataset.end;
       if (a === 'again') {
-        if (s.kind === 'casual') startOffline(P.KICKS_PER_ROUND);
+        if (c) startCareer(c.won && c.nextBoss ? c.nextBoss.id : c.boss.id);
+        else if (s.kind === 'casual') startOffline(P.KICKS_PER_ROUND);
         else if (s.kind === 'challenge' && s.challenge) startRanked(s.challenge.id ? s.challenge : null);
         else startRanked();
-      } else if (a === 'challenge') shareChallenge(s.roundId, s.score);
-      else if (a === 'shop') openShop(online ? 'online' : 'offline');
+      } else if (a === 'career') openCareer();
+      else if (a === 'challenge') shareChallenge(s.roundId, s.score);
+      else if (a === 'shop') openShop(s.offline ? 'offline' : 'online');
       else if (a === 'leaderboard') openLeaderboard();
       else goMenu();
     };
     show('end');
   }
 
-  function activeProfileFor(kind) {
-    return kind === 'casual' || kind === 'freekick' ? S.offline : S.player || S.offline;
+  function activeProfileFor(s) {
+    return s.offline ? S.offline : S.player || S.offline;
   }
 
   async function shareChallenge(roundId, score) {
@@ -557,7 +680,8 @@
   function quitPrompt() {
     if (game.mode === 'replay') { game.stop(); goMenu(); return; }
     const kind = S.current && S.current.kind;
-    const warn = kind === 'ranked' || kind === 'challenge' ? 'An unfinished ranked round won’t count towards the leaderboard (kicks so far still count for your longest kick).'
+    const warn = kind === 'career' ? 'Leaving forfeits nothing, but this match won’t count for your Skill Level.'
+      : kind === 'ranked' || kind === 'challenge' ? 'An unfinished ranked round won’t count towards the leaderboard (kicks so far still count for your longest kick).'
       : kind === 'room' ? 'You’ll stay on the room board with the kicks you’ve taken so far.'
         : kind === 'freekick' ? 'Coins from your free kicks are already saved.'
           : 'This casual round won’t be saved.';
@@ -597,6 +721,113 @@
   }
 
   // -------------------------------------------------------------------------
+  // Coins guide, Career, Patch notes
+  // -------------------------------------------------------------------------
+  function coinGuideHtml() {
+    return `<ul class="howto coin-guide">
+      <li><b>Finish a round:</b> ${C.ROUND_COMPLETION_COINS} coins + 1 coin for every ${C.POINTS_PER_COIN} points you score.</li>
+      <li><b>Free Kick:</b> 1 coin for every ${C.FREE_KICK_POINTS_PER_COIN} points, paid after every kick.</li>
+      <li><b>Level up:</b> bonus coins every level (${fmt(C.levelUpCoins(2))} at level 2, rising by 25 each level).</li>
+      <li><b>Milestones:</b> one-time rewards from ${fmt(Math.min(...C.MILESTONES.map((m) => m.reward)))} to ${fmt(Math.max(...C.MILESTONES.map((m) => m.reward)))} coins (see Locker → Milestones).</li>
+      <li><b>Career:</b> the first win against each boss pays a bounty (up to ${fmt(Math.max(...EKCareer.BOSSES.map((b) => b.reward)))} coins).</li>
+    </ul>`;
+  }
+
+  function careerProfile() {
+    return careerOnline() ? S.player : S.offline;
+  }
+
+  function openCareer() {
+    renderCareer();
+    show('career');
+  }
+
+  function skillGraph(history) {
+    const pts = history.length > 1 ? history : [0].concat(history);
+    const w = 280, h = 70, max = Math.max(EKCareer.PRO_SKILL * 1.2, ...pts);
+    const xy = pts.map((v, i) => `${((i / (pts.length - 1)) * w).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(' ');
+    const proY = (h - (EKCareer.PRO_SKILL / max) * h).toFixed(1);
+    return `<svg class="skill-graph" viewBox="-4 -4 ${w + 8} ${h + 8}" role="img" aria-label="Skill level history">
+      <line x1="0" x2="${w}" y1="${proY}" y2="${proY}" class="pro-line"/>
+      <text x="${w}" y="${Number(proY) - 3}" text-anchor="end" class="pro-label">PRO</text>
+      <polyline points="${xy}" class="skill-line"/>
+    </svg>`;
+  }
+
+  function renderCareer() {
+    const prof = careerProfile();
+    const car = EKCareer.normalize(prof.career);
+    const pct = Math.min(100, (car.skill / EKCareer.PRO_SKILL) * 100);
+    const mode = careerOnline() ? `🌐 ${esc(S.player.name)} — server-verified` : '📴 Offline profile';
+    let html = `
+      <div class="career-head">
+        <div class="skill-box">
+          <span class="muted">Skill Level</span>
+          <div class="skill-num">${fmt(car.skill)}${car.pro ? ' <span class="pro-badge">PRO</span>' : ''}</div>
+          <div class="pro-bar"><div style="width:${pct}%"></div><span>PRO 1,000</span></div>
+          <div class="muted small">${mode} · ${car.wins}W–${car.matches - car.wins}L</div>
+        </div>
+        <div class="graph-box">${skillGraph(car.history)}</div>
+        <div class="mastery ${car.pro ? 'earned' : ''}">
+          <canvas id="masteryPreview" width="72" height="72"></canvas>
+          <div><b>Mastery Pro Ball</b><br><span class="muted small">${car.pro ? 'Earned! Equip it in the Locker.' : 'Reach 1,000 skill to earn it.'}</span></div>
+        </div>
+      </div>
+      <p class="muted">Every match is 10 kicks on the <b>same balls, wind and field</b> as your opponent. Beat a boss to unlock the next. Wins raise your Skill Level, losses lower it.</p>`;
+    for (const tier of EKCareer.TIERS) {
+      const bosses = EKCareer.BOSSES.filter((b) => b.tier === tier.id);
+      html += `<h3 style="color:${tier.color}">${esc(tier.name)}</h3><div class="boss-grid">`;
+      html += bosses.map((b) => {
+        const beaten = car.beaten.includes(b.id);
+        const open = EKCareer.isUnlocked(car, b.id);
+        const status = beaten ? '<span class="tag won">✓ Beaten</span>' : open ? '<span class="tag next">Next challenger</span>' : '<span class="tag">🔒 Locked</span>';
+        return `<div class="boss ${open ? '' : 'locked'} ${beaten ? 'beaten' : ''}">
+          <div class="boss-avatar">${open ? b.avatar : '❔'}</div>
+          <div class="boss-info"><b>${open ? esc(b.name) : '???'}</b>
+            <span class="muted small">Rating ${fmt(b.rating)} · Gear Lv ${b.gear} · ${beaten ? 'bounty claimed' : `bounty 🪙 ${fmt(b.reward)}`}</span>
+            ${open ? `<i class="taunt">“${esc(b.taunt)}”</i>` : ''}${status}</div>
+          ${open ? `<button class="btn ${beaten ? '' : 'primary'}" data-boss="${b.id}">${beaten ? 'Rematch' : 'Challenge'}</button>` : ''}
+        </div>`;
+      }).join('');
+      html += '</div>';
+    }
+    $('#careerBody').innerHTML = html;
+    const cv = $('#masteryPreview');
+    if (cv) {
+      const r = new EK.Renderer(cv);
+      r.canvas.width = 144; r.canvas.height = 144; r.W = 72; r.H = 72; r.dpr = 2; r.groundY = 999;
+      r.setEquipped({ ball: 'mastery' });
+      r.camX = 0; r.scale = 260; r.anchor = 0.5; r.time = performance.now() / 1000;
+      r.ctx.setTransform(2, 0, 0, 2, 0, 0);
+      r.ctx.globalAlpha = car.pro ? 1 : 0.35;
+      r.drawBall(0, (999 - 36) / 260, 0.3, r.time);
+      r.ctx.globalAlpha = 1;
+    }
+  }
+
+  const PATCH_SEEN_KEY = 'ek_patch_seen';
+  function latestPatch() {
+    return (window.EK_PATCH_NOTES || [])[0];
+  }
+  function renderPatchBadge() {
+    const latest = latestPatch();
+    $('#patchBadge').classList.toggle('hidden', !latest || local.get(PATCH_SEEN_KEY, null) === latest.version);
+  }
+  function openPatchNotes() {
+    const notes = window.EK_PATCH_NOTES || [];
+    const html = notes.map((n, i) => `
+      <div class="patch ${i ? 'old' : ''}">
+        <div class="patch-head"><span class="patch-ver">v${esc(n.version)}</span><span class="muted">${esc(n.date)}</span></div>
+        <h3>${esc(n.title)}</h3>
+        ${n.sections.map((sec) => `<h4>${esc(sec.heading)}</h4><ul>${sec.items.map((it) => `<li>${esc(it)}</li>`).join('')}</ul>`).join('')}
+      </div>`).join('');
+    modal(`<h2>📰 Patch notes</h2><div class="patch-notes">${html}</div>
+      <div class="actions"><button class="btn primary" data-modal="close">Let's kick!</button></div>`);
+    if (notes[0]) local.set(PATCH_SEEN_KEY, notes[0].version);
+    renderPatchBadge();
+  }
+
+  // -------------------------------------------------------------------------
   // Shop
   // -------------------------------------------------------------------------
   function openShop(which) {
@@ -619,33 +850,44 @@
     const level = C.levelFromXp(prof.xp);
     const lo = C.xpForLevel(level), hi = C.xpForLevel(level + 1);
     const pct = Math.min(100, ((prof.xp - lo) / (hi - lo)) * 100);
+    const nu = C.nextUnlocks(level);
     $('#shopHead').innerHTML = `
       <div class="coins-big">🪙 ${fmt(prof.coins)}</div>
       <div class="level-box"><b>Level ${level}</b> <span class="muted">· ${fmt(prof.xp - lo)} / ${fmt(hi - lo)} XP to level ${level + 1}</span>
-        <div class="xpbar"><div style="width:${pct}%"></div></div></div>`;
+        <div class="xpbar"><div style="width:${pct}%"></div></div>
+        ${nu ? `<div class="muted small">🔓 Level ${nu.level} unlocks: ${nu.items.map(esc).join(', ')}</div>` : ''}</div>
+      <details class="coin-help"><summary>🪙 How do I earn coins?</summary>${coinGuideHtml()}</details>`;
     $$('#shopTabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === S.shopTab));
     const grid = $('#shopGrid');
     if (S.shopTab === 'upgrades') {
       grid.innerHTML = C.UPGRADES.map((u) => {
         const lv = (prof.upgrades && prof.upgrades[u.id]) | 0;
-        const pips = Array.from({ length: 5 }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
+        const pips = Array.from({ length: C.MAX_UPGRADE }, (_, i) => `<i class="${i < lv ? 'on' : ''}${i === 4 ? ' gap' : ''}"></i>`).join('');
         let btn;
-        if (lv >= 5) btn = '<button disabled>MAXED</button>';
+        if (lv >= C.MAX_UPGRADE) btn = '<button disabled>MAXED</button>';
         else if (level < C.UPGRADE_LEVEL_REQ[lv]) btn = `<button disabled>🔒 Level ${C.UPGRADE_LEVEL_REQ[lv]}</button>`;
         else btn = `<button data-buy="upgrade:${u.id}" ${prof.coins < C.UPGRADE_COSTS[lv] ? 'disabled' : ''}>Upgrade · 🪙 ${fmt(C.UPGRADE_COSTS[lv])}</button>`;
         return `<div class="item"><div class="top"><span class="icon">${u.icon}</span><div><div class="name">${esc(u.name)}</div><div class="desc">${esc(u.desc)}</div></div></div>
-          <div class="pips">${pips}</div>${btn}</div>`;
+          <div class="pips">${pips}</div><div class="muted small">Level ${lv} / ${C.MAX_UPGRADE}</div>${btn}</div>`;
       }).join('');
+    } else if (S.shopTab === 'milestones') {
+      const have = new Set(prof.milestones || []);
+      const done = C.MILESTONES.filter((m) => have.has(m.id)).length;
+      grid.innerHTML = `<div class="ms-summary">🏅 ${done} / ${C.MILESTONES.length} milestones complete</div>` + C.MILESTONES.map((m) => `
+        <div class="item ms ${have.has(m.id) ? 'equipped' : ''}"><div class="top"><span class="icon">${have.has(m.id) ? '🏅' : '🔒'}</span>
+          <div><div class="name">${esc(m.name)}</div><div class="desc">${esc(m.desc)}</div></div></div>
+          <div class="ms-reward">${have.has(m.id) ? '✓ Claimed' : `Reward 🪙 ${fmt(m.reward)}`}</div></div>`).join('');
     } else {
       const list = C.SLOTS[S.shopTab];
       const eq = Object.assign({}, C.DEFAULT_EQUIPPED, prof.equipped);
-      grid.innerHTML = list.map((it) => {
+      grid.innerHTML = list.slice().sort((a, b) => a.level - b.level).map((it) => {
         const key = `${S.shopTab}:${it.id}`;
         const owned = C.isOwned(prof, S.shopTab, it.id);
         const isEq = eq[S.shopTab] === it.id;
         let btn;
         if (isEq) btn = '<button class="owned" disabled>✓ Equipped</button>';
         else if (owned) btn = `<button class="owned" data-equip="${S.shopTab}:${it.id}">Equip</button>`;
+        else if (it.career) btn = '<button disabled>🏆 Go PRO in Career</button>';
         else if (level < it.level) btn = `<button disabled>🔒 Level ${it.level}</button>`;
         else btn = `<button data-buy="${key}" ${prof.coins < it.cost ? 'disabled' : ''}>Buy · 🪙 ${fmt(it.cost)}</button>`;
         return `<div class="item ${isEq ? 'equipped' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}</div></div>${btn}</div>`;
@@ -655,8 +897,11 @@
 
   function itemIcon(slot, it) {
     if (slot === 'outfit') return `<span class="icon" style="background:${it.shirt}">${it.pattern === 'gi' ? '🥋' : it.id === 'astro' ? '🧑‍🚀' : it.id === 'suit' ? '👔' : '👕'}</span>`;
-    if (slot === 'ball') return `<span class="icon" style="background:${it.base}">${it.style === 'egg' ? '🥚' : it.style === 'fire' ? '🔥' : it.style === 'beach' ? '🏖️' : '⚽'}</span>`;
-    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥' };
+    if (slot === 'ball') {
+      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆' };
+      return `<span class="icon" style="background:${it.base}">${icons[it.style] || '⚽'}</span>`;
+    }
+    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️' };
     return `<span class="icon">${icons[it.id] || '✨'}</span>`;
   }
 
@@ -847,7 +1092,14 @@
     el.classList.toggle('hidden', !show);
     if (!show) return;
     const me = S.player && S.player.id;
-    const rows = room.members.slice().sort((a, b) => b.total - a.total).map((m, i) => `
+    // Your own row only moves when your result is on screen, never mid-kick.
+    const view = room.members.map((m) => {
+      if (m.id !== me || !game.k) return m;
+      const k = game.k;
+      const shown = k.phase === 'result' ? k.index + 1 : k.index;
+      return Object.assign({}, m, { total: game.total || 0, kicks: shown, done: shown >= P.KICKS_PER_ROUND });
+    });
+    const rows = view.sort((a, b) => b.total - a.total).map((m, i) => `
       <div class="rp-row ${m.id === me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} ${esc(m.name)}</span>
       <span>${fmt(m.total)} <span class="rp-kicks">${m.done ? '✓' : `${m.kicks}/10`}</span></span></div>`).join('');
     el.innerHTML = `<h4>Room ${esc(room.code)}</h4>${rows}`;
@@ -932,7 +1184,9 @@
         case 'freekick': startOffline(Infinity); break;
         case 'shop': openShop(); break;
         case 'leaderboard': openLeaderboard(); break;
-        case 'howto': show('howto'); break;
+        case 'howto': $('#coinGuide').innerHTML = coinGuideHtml(); show('howto'); break;
+        case 'career': openCareer(); break;
+        case 'patchnotes': openPatchNotes(); break;
         case 'profile': renderProfile(); show('profile'); break;
         case 'back': goMenu(); break;
       }
@@ -948,6 +1202,8 @@
     if (eq) { shopAction('equip', eq.dataset.equip); return; }
     const lb = e.target.closest('#lbTabs [data-type]');
     if (lb) { S.lbType = lb.dataset.type; renderLeaderboard(); return; }
+    const boss = e.target.closest('[data-boss]');
+    if (boss) { sfx.click(); startCareer(boss.dataset.boss); return; }
     const rp = e.target.closest('[data-replay]');
     if (rp) { watchReplay(rp.dataset.replay, Number(rp.dataset.idx)); return; }
     const ch = e.target.closest('[data-challenge]');
@@ -1051,7 +1307,12 @@
     if (challengeId || roomCode) history.replaceState(null, '', location.pathname);
     await checkOnline();
     game.attract(activeProfile().equipped);
+    renderPatchBadge();
+    const latest = latestPatch();
+    const returning = !!S.token || S.offline.roundsPlayed > 0 || S.offline.bestKick > 0;
+    const unseen = latest && local.get(PATCH_SEEN_KEY, null) !== latest.version;
     if (challengeId && S.online) offerChallenge(challengeId);
+    else if (!roomCode && returning && unseen) openPatchNotes();
     else if (roomCode && S.online) {
       requirePlayer(() => {
         S.wantRoom = roomCode.toUpperCase();
