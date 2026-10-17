@@ -96,6 +96,9 @@
         boing: ['#047dc3', '#4caf50', '#ffffff'],
         confetti: ['#047dc3', '#4caf50', '#ffd600', '#e53935', '#ffffff', '#ab47bc'],
         kick: ['#ffffff', '#fff59d'],
+        fire: ['#ff9800', '#ff5722', '#ffd54f', '#fff3e0'],
+        crater: ['#6d4c41', '#8d6e63', '#ff7043', '#ffab40', '#3e2723'],
+        magnet: ['#7c4dff', '#40c4ff', '#ffffff', '#e040fb'],
       }[type] || ['#fff'];
       for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI;
@@ -147,9 +150,11 @@
       if (st.henryBuddy && this.visible(-1.6, 200)) this.drawHenry(this.sx(-1.3), this.groundY, Math.max(0.75 * this.scale, 20), { happy: false });
       if (st.jason) this.drawJason(st.jason);
       if (st.showSweet && st.jason) this.drawSweetSpot(st);
-      if (st.trail) this.drawTrail(st.trail, st.time);
+      if (st.trail && st.power) this.drawPowerTrail(st.trail, st.power, st.time);
+      else if (st.trail) this.drawTrail(st.trail, st.time);
       if (st.ball && st.ball.visible && st.golden) this.drawGoldenGlow(st.ball.x, st.ball.y, st.time);
-      if (st.ball && st.ball.visible) this.drawBall(st.ball.x, st.ball.y, st.ball.rot, st.time);
+      if (st.ball && st.ball.visible && st.power) this.drawPowerBall(st.ball.x, st.ball.y, st.ball.rot, st.time, st.power);
+      else if (st.ball && st.ball.visible) this.drawBall(st.ball.x, st.ball.y, st.ball.rot, st.time);
       this.drawParticles();
     }
 
@@ -1718,6 +1723,136 @@
         ctx.lineWidth = 1;
         if (ball.style !== 'egg') { ctx.beginPath(); ctx.arc(X, Y, r, 0, Math.PI * 2); ctx.stroke(); }
       }
+    }
+
+    /** Power Balls (5 PERFECT kicks in a row): each has its own look. */
+    drawPowerBall(x, y, rot, time, power) {
+      const ctx = this.ctx;
+      const r = Math.max(0.11 * this.scale, 6.5); // a touch bigger than normal so it stands out zoomed out
+      const X = this.sx(x), Y = this.sy(y) - r * 0.2;
+      const sh = Math.max(0.15, 1 - y / 30);
+      ctx.fillStyle = `rgba(0,0,0,${0.22 * sh})`;
+      ctx.beginPath(); ctx.ellipse(X, this.groundY + 2, r * sh, r * 0.3 * sh, 0, 0, Math.PI * 2); ctx.fill();
+      const glow = (inner, outer, size) => {
+        const g = ctx.createRadialGradient(X, Y, r * 0.6, X, Y, r * size);
+        g.addColorStop(0, inner);
+        g.addColorStop(1, outer);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(X, Y, r * size, 0, Math.PI * 2); ctx.fill();
+      };
+      ctx.save();
+      if (power === 'fire') {
+        glow('rgba(255,152,0,0.9)', 'rgba(255,87,34,0)', 2.6 + 0.3 * Math.sin(time * 20));
+        for (let i = 0; i < 6; i++) {
+          // Flickering flame tongues streaming back from the ball.
+          const a = Math.PI + (i - 2.5) * 0.32 + Math.sin(time * 18 + i) * 0.12;
+          const len = r * (1.6 + 0.6 * Math.sin(time * 25 + i * 2));
+          ctx.fillStyle = i % 2 ? 'rgba(255,193,7,0.85)' : 'rgba(255,87,34,0.85)';
+          ctx.beginPath();
+          ctx.moveTo(X + Math.cos(a - 0.4) * r * 0.8, Y + Math.sin(a - 0.4) * r * 0.8);
+          ctx.quadraticCurveTo(X + Math.cos(a) * len * 1.2, Y + Math.sin(a) * len * 1.2 - r * 0.3, X + Math.cos(a) * (r + len), Y + Math.sin(a) * (r + len));
+          ctx.quadraticCurveTo(X + Math.cos(a) * len, Y + Math.sin(a) * len + r * 0.3, X + Math.cos(a + 0.4) * r * 0.8, Y + Math.sin(a + 0.4) * r * 0.8);
+          ctx.fill();
+        }
+        ctx.translate(X, Y); ctx.rotate(rot);
+        const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
+        g.addColorStop(0, '#fff8e1'); g.addColorStop(0.45, '#ffb300'); g.addColorStop(1, '#e64a19');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      } else if (power === 'bouncy') {
+        glow('rgba(255,112,67,0.35)', 'rgba(255,112,67,0)', 1.9);
+        // Squash a little when it's near the ground.
+        const squash = y < 0.4 ? 0.8 : 1;
+        ctx.translate(X, Y + (1 - squash) * r); ctx.scale(1 / squash, squash); ctx.rotate(rot);
+        ctx.fillStyle = '#f4511e';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#3e2723';
+        ctx.lineWidth = Math.max(1, r * 0.1);
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.stroke();
+        ctx.beginPath(); ctx.arc(-r * 1.25, 0, r * 0.95, -0.9, 0.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(r * 1.25, 0, r * 0.95, Math.PI - 0.9, Math.PI + 0.9); ctx.stroke();
+      } else if (power === 'meteor') {
+        glow('rgba(255,111,0,0.95)', 'rgba(255,61,0,0)', 3 + 0.25 * Math.sin(time * 16));
+        ctx.translate(X, Y); ctx.rotate(rot);
+        ctx.fillStyle = '#4e342e';
+        ctx.beginPath();
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * Math.PI * 2;
+          const rr = r * (0.88 + 0.14 * Math.sin(i * 2.7));
+          if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff7043';
+        ctx.beginPath(); ctx.arc(r * 0.3, -r * 0.2, r * 0.22, 0, Math.PI * 2); ctx.arc(-r * 0.35, r * 0.3, r * 0.16, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3e2723';
+        ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.4, r * 0.14, 0, Math.PI * 2); ctx.fill();
+      } else if (power === 'magnet') {
+        glow('rgba(124,77,255,0.5)', 'rgba(64,196,255,0)', 2.4);
+        ctx.strokeStyle = 'rgba(64,196,255,0.8)';
+        ctx.lineWidth = Math.max(1, r * 0.12);
+        for (let i = 0; i < 3; i++) {
+          const rr = r * (1.4 + ((time * 1.5 + i / 3) % 1) * 1.2);
+          ctx.globalAlpha = 1 - ((time * 1.5 + i / 3) % 1);
+          ctx.beginPath(); ctx.arc(X, Y, rr, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.translate(X, Y); ctx.rotate(rot * 0.3);
+        // A little horseshoe magnet: red arms, silver tips.
+        ctx.lineCap = 'butt';
+        ctx.lineWidth = r * 0.75;
+        ctx.strokeStyle = '#e53935';
+        ctx.beginPath(); ctx.arc(0, -r * 0.05, r * 0.6, Math.PI, 0, true); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.05); ctx.lineTo(-r * 0.6, -r * 0.55); ctx.moveTo(r * 0.6, -r * 0.05); ctx.lineTo(r * 0.6, -r * 0.55); ctx.stroke();
+        ctx.strokeStyle = '#eceff1';
+        ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.55); ctx.lineTo(-r * 0.6, -r * 0.95); ctx.moveTo(r * 0.6, -r * 0.55); ctx.lineTo(r * 0.6, -r * 0.95); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawPowerTrail(trail, power, time) {
+      const ctx = this.ctx;
+      const n = trail.length / 2;
+      if (n < 2) return;
+      ctx.save();
+      ctx.lineCap = 'round';
+      if (power === 'fire' || power === 'meteor') {
+        const big = power === 'meteor' ? 1.6 : 1;
+        for (let i = 1; i < n; i++) {
+          const a = i / n;
+          ctx.strokeStyle = power === 'meteor' && a < 0.45 ? `rgba(90,70,60,${a * 0.6})` : `rgba(255,${Math.round(90 + a * 120)},0,${a * 0.9})`;
+          ctx.lineWidth = (2 + a * 9) * big;
+          ctx.beginPath();
+          ctx.moveTo(this.sx(trail[(i - 1) * 2]), this.sy(trail[(i - 1) * 2 + 1]));
+          ctx.lineTo(this.sx(trail[i * 2]), this.sy(trail[i * 2 + 1]));
+          ctx.stroke();
+        }
+        for (let i = 0; i < n; i += 3) {
+          const a = i / n;
+          ctx.fillStyle = `rgba(255,${200 + ((i * 17) % 55)},80,${a})`;
+          ctx.beginPath();
+          ctx.arc(this.sx(trail[i * 2]) + Math.sin(i * 9.1 + time * 20) * 5, this.sy(trail[i * 2 + 1]) + Math.cos(i * 5.3 + time * 20) * 5, 1.5 + a * 2.5 * big, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (power === 'bouncy') {
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = 'rgba(244,81,30,0.75)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const X = this.sx(trail[i * 2]), Y = this.sy(trail[i * 2 + 1]);
+          if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (power === 'magnet') {
+        for (let i = 0; i < n; i += 2) {
+          const a = i / n;
+          ctx.fillStyle = i % 4 ? `rgba(64,196,255,${a})` : `rgba(224,64,251,${a})`;
+          this.star(this.sx(trail[i * 2]) + Math.sin(i * 4.1 + time * 10) * 7, this.sy(trail[i * 2 + 1]) + Math.cos(i * 3.3 + time * 10) * 7, 2 + a * 3);
+        }
+      }
+      ctx.restore();
     }
 
     /** Pulsing gold aura that marks a Golden Ball. */

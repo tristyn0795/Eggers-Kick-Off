@@ -121,6 +121,7 @@
       this.roundCoins = 0;
       this.setCombo(0, 1);
       this.golden(false);
+      this.power(null, 0);
       $('#hudCoins').textContent = '+0';
       $('#hudReplay').textContent = opts.replay || '';
       $('#pillBeat').classList.toggle('hidden', !opts.beat);
@@ -137,6 +138,7 @@
     },
     hide() {
       this.golden(false);
+      this.power(null, 0);
       $('#hud').classList.add('hidden');
       $('#roomPanel').classList.add('hidden');
       this.hideResult();
@@ -208,6 +210,13 @@
         }
         this.countCoins(got);
       }
+      const pw = r.power && P.POWER_BALLS[r.power];
+      if (pw) {
+        const what = r.power === 'magnet'
+          ? (r.magnetFrom ? `pulled in from ${fmtM(r.magnetFrom)}` : 'no target close enough')
+          : r.power === 'fire' ? '+35% distance' : r.power === 'bouncy' ? '+25% distance' : '+45% distance';
+        sub.push(`<span class="power-gain">${pw.icon} ${esc(pw.name)}: ${what}</span>`);
+      }
       if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
       $('#resSub').innerHTML = sub.join(' · ');
       const ms = r.milestones || [];
@@ -244,6 +253,17 @@
     },
     golden(on) {
       $('#hud').classList.toggle('golden', !!on);
+    },
+    /** PERFECT streak toward a Power Ball, or the Power Ball that's loaded. */
+    power(id, run) {
+      const pw = id && P.POWER_BALLS[id];
+      const pill = $('#pillPower');
+      pill.classList.toggle('hidden', !pw && !run);
+      pill.classList.toggle('armed', !!pw);
+      $('#hud').classList.toggle('powered', !!pw);
+      $('#hudPowerLbl').textContent = pw ? 'POWER' : 'PERFECT';
+      $('#hudPower').innerHTML = pw ? `${pw.icon}<span class="pw-name"> ${pw.short}</span>` : `${run}/${P.POWER_STREAK}`;
+      pill.title = pw ? pw.desc : `${P.POWER_STREAK} PERFECT kicks in a row load a Power Ball`;
     },
     countCoins(amount) {
       if (!amount) return;
@@ -433,7 +453,8 @@
         if (isBlocked(msg.playerId)) break;
         const t = msg.target;
         const where = t ? ` — ${t.ring === 'BULLSEYE' ? '🎯 BULLSEYE' : t.ring.toLowerCase()} at ${esc(t.name)}` : '';
-        addFeed(`🔥 <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${where}`);
+        const pw = msg.power && P.POWER_BALLS[msg.power];
+        addFeed(`${pw ? pw.icon : '🔥'} <b>${esc(msg.name)}</b> kicked ${fmtM(msg.distance)}${pw ? ` with a ${esc(pw.name)}` : ''}${where}`);
         break;
       }
       case 'room:state':
@@ -448,7 +469,8 @@
         break;
       case 'room:kick':
         if (S.player && msg.id !== S.player.id && !isBlocked(msg.id)) {
-          addFeed(`👟 <b>${esc(msg.name)}</b>: ${fmtM(msg.distance)} <span style="opacity:.7">(+${fmt(msg.points)})</span>`);
+          const pw = msg.power && P.POWER_BALLS[msg.power];
+          addFeed(`${pw ? pw.icon : '👟'} <b>${esc(msg.name)}</b>: ${fmtM(msg.distance)} <span style="opacity:.7">(+${fmt(msg.points)})</span>`);
         }
         break;
       case 'room:final':
@@ -600,7 +622,7 @@
   function bossKick(cur, i) {
     while (cur.cpu.kicks.length <= i) {
       const n = cur.cpu.kicks.length;
-      cur.cpu.kicks.push(EKCareer.cpuKick(cur.cpuArgs.baseSeed, cur.boss, n, cur.cpuArgs.upgrades));
+      cur.cpu.kicks.push(EKCareer.cpuKick(cur.cpuArgs.baseSeed, cur.boss, n, cur.cpuArgs.upgrades, cur.cpu.kicks));
     }
     return cur.cpu.kicks[i];
   }
@@ -614,7 +636,8 @@
     $('#hudVs').textContent = fmt(cur.cpuTotal);
     const lead = (game.total || 0) - cur.cpuTotal;
     const state = lead > 0 ? `You lead by ${fmt(lead)}` : lead < 0 ? `You trail by ${fmt(-lead)}` : 'All square';
-    return `${cur.boss.avatar} ${esc(cur.boss.name)}: ${fmtM(ck.distance)} <small>(+${fmt(ck.points)})</small><br><b>${state}</b>`;
+    const pw = ck.power && P.POWER_BALLS[ck.power];
+    return `${cur.boss.avatar} ${esc(cur.boss.name)}: ${pw ? `${pw.icon} ` : ''}${fmtM(ck.distance)} <small>(+${fmt(ck.points)})</small><br><b>${state}</b>`;
   };
 
   function beginOnlineRound(opts) {
@@ -1299,7 +1322,7 @@
       hideScreens();
       hud.show('replay', { replay: `${r.name} · ${fmtM(k.d)}` });
       game.startReplay({
-        seed: P.kickSeed(r.baseSeed, idx), frame: k.f, upgrades: r.upgrades, equipped: r.equipped,
+        seed: P.kickSeed(r.baseSeed, idx), frame: k.f, upgrades: r.upgrades, equipped: r.equipped, power: k.pw || null,
         title: `${r.name}'s ${fmtM(k.d)} kick`,
         onEnd: () => { hud.hide(); game.attract(activeProfile().equipped); openLeaderboard(); },
       });

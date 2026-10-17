@@ -1,5 +1,5 @@
 /* Offline support: cache the game shell so Casual / Free Kick work with no connection. */
-const CACHE = 'eko-v9';
+const CACHE = 'eko-v10';
 const ASSETS = [
   '/', '/index.html', '/style.css', '/icon.svg', '/manifest.webmanifest', '/app-config.js',
   '/icons/icon-192.png', '/icons/apple-touch-icon.png', '/privacy.html', '/terms.html', '/legal.css',

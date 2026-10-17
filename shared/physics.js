@@ -24,7 +24,7 @@
   const KICKS_PER_ROUND = 10;
   // Bump whenever kick physics, scoring or targets change. Store-installed apps carry their own
   // copy of this file; an app with an older RULES_VERSION is asked to update before playing online.
-  const RULES_VERSION = 1;
+  const RULES_VERSION = 2;
   const FIELD_LENGTH = 160000;
 
   // Topgolf-style targets on the field. Points are awarded for where the ball
@@ -234,8 +234,117 @@
    * Simulate a whole kick. `kickFrame` is the juggle frame on which the player
    * pressed kick. With opts.record the full ball path is returned for playback.
    */
+  // ---- Power Balls: land POWER_STREAK PERFECT kicks in a row and the next ball is special ----
+  const POWER_STREAK = 5;
+  const POWER_BALLS = {
+    fire: { id: 'fire', name: 'Fireball', short: 'FIRE', icon: '🔥', desc: 'Rockets 35% further.' },
+    bouncy: { id: 'bouncy', name: 'Super Bouncy Ball', short: 'BOUNCY', icon: '🏀', desc: 'Huge bounces that carry it 25% further.' },
+    meteor: { id: 'meteor', name: 'Meteor', short: 'METEOR', icon: '☄️', desc: 'One giant arc 45% further, then it craters: no bounce, no roll.' },
+    magnet: { id: 'magnet', name: 'Magnet Ball', short: 'MAGNET', icon: '🧲', desc: 'If it stops near a target, it gets pulled into the bullseye.' },
+  };
+  const POWER_IDS = ['fire', 'bouncy', 'meteor', 'magnet'];
+
+  function isPerfect(result) {
+    return !!result && !result.whiff && result.quality >= 0.95;
+  }
+
+  /**
+   * The Power Ball for the next kick, or null. `history` is this round's earlier kicks in order,
+   * each { perfect: bool, power: id|null }. A power kick resets the run, so you earn each one.
+   * Which ball you get is fixed by the ball's seed, so client and server always agree.
+   */
+  function perfectRun(history) {
+    let run = 0;
+    for (const h of history || []) run = h && h.power ? 0 : h && h.perfect ? run + 1 : 0;
+    return run;
+  }
+
+  function powerBallFor(seed, history) {
+    if (perfectRun(history) < POWER_STREAK) return null;
+    return POWER_IDS[hashSeed(seed >>> 0, 0x9B0B) % POWER_IDS.length];
+  }
+
+  const MAGNET_SLIDE = 40;
+
+  /** How far a Magnet Ball looks for a target to pull into. */
+  function magnetRange(t) {
+    return ringRadii(t)[2] * 1.75;
+  }
+
+  /**
+   * Simulate one kick. opts: { record: keep the flight path for drawing, power: a Power Ball id }.
+   * Fireball, Super Bouncy and Meteor are a fixed boost on top of the kick you actually hit
+   * (so they're worth the same at every level); Magnet changes where the ball settles.
+   */
   function simulateKick(seed, kickFrame, upgrades, opts) {
     opts = opts || {};
+    const power = POWER_BALLS[opts.power] ? opts.power : null;
+    if (power !== 'fire' && power !== 'bouncy' && power !== 'meteor') return simulateCore(seed, kickFrame, upgrades, opts, power);
+    const base = simulateCore(seed, kickFrame, upgrades, opts, null);
+    base.power = power;
+    if (base.whiff || base.distance <= BALL_X) return base;
+    return power === 'meteor' ? meteorize(base) : stretchKick(base, power);
+  }
+
+  // Fireball: the same kick, 35% further (it just goes faster). Super Bouncy: 25% further with much taller bounces.
+  const STRETCH = { fire: { x: 1.35, y: 1 }, bouncy: { x: 1.25, y: 1.8 } };
+  function stretchKick(r, power) {
+    const k = STRETCH[power];
+    const sx = (x) => BALL_X + (x - BALL_X) * k.x;
+    const end = sx(r.distance);
+    if (r.path) {
+      for (let i = 0; i < r.path.length; i += 2) {
+        r.path[i] = sx(r.path[i]);
+        r.path[i + 1] *= k.y;
+      }
+    }
+    if (r.events) {
+      // Pads and puddles don't line up with a stretched flight, so they show as plain bounces.
+      for (const e of r.events) {
+        e.x = sx(e.x);
+        if (e.type === 'pad' || e.type === 'puddle') e.type = 'bounce';
+      }
+    }
+    r.padsHit = 0;
+    r.puddlesHit = 0;
+    r.launchSpeed *= k.x;
+    r.firstBounce = Math.floor(sx(r.firstBounce));
+    r.maxHeight = Math.floor(r.maxHeight * k.y);
+    r.distance = Math.floor(end * 10) / 10;
+    r.target = targetFor(r.distance);
+    return r;
+  }
+
+  // Meteor: one huge arc to 45% past where the kick would have ended, then a crater. No bounce, no roll.
+  function meteorize(r) {
+    const startX = BALL_X;
+    const startY = r.contactHeight;
+    const endX = BALL_X + (r.distance - BALL_X) * 1.45;
+    const span = endX - startX;
+    const apex = Math.min(span * 0.06, 1800) + startY;
+    const frames = Math.max(120, Math.min(5400, Math.round(span / 12)));
+    if (r.path) {
+      const path = [];
+      for (let i = 1; i <= frames; i++) {
+        const t = i / frames;
+        path.push(startX + span * t, Math.max(0, startY * (1 - t) + 4 * (apex - startY / 2) * t * (1 - t)));
+      }
+      r.path = path;
+      r.events = [{ f: frames, type: 'crater', x: endX }];
+    }
+    r.bounces = 0;
+    r.padsHit = 0;
+    r.puddlesHit = 0;
+    r.launchSpeed *= 1.45;
+    r.flightFrames = frames;
+    r.distance = Math.floor(endX * 10) / 10;
+    r.firstBounce = Math.floor(endX);
+    r.maxHeight = Math.floor(apex);
+    r.target = targetFor(r.distance);
+    return r;
+  }
+
+  function simulateCore(seed, kickFrame, upgrades, opts, power) {
     const record = !!opts.record;
     seed = seed >>> 0;
     kickFrame = kickFrame | 0;
@@ -270,6 +379,8 @@
       puddlesHit: 0,
       target: null,
       flightFrames: 0,
+      power: power,
+      magnetFrom: null,
       path: null,
       events: null,
     };
@@ -292,6 +403,7 @@
       const slope = 0.2 + 0.55 * h;
       let speed = BASE_SPEED * (0.3 + 0.7 * q) * st.power;
       if (hvy < 0) speed *= 1.03; // striking it on the drop adds a little zip
+
       const n = Math.sqrt(1 + slope * slope);
       vx = speed / n;
       vy = (speed * slope) / n;
@@ -368,6 +480,29 @@
       if (path) path.push(x, y);
     }
 
+    if (power === 'magnet' && !result.whiff && x > 0) {
+      // Pull into the nearest target's bullseye if it's in range.
+      let best = null;
+      for (const t of TARGETS) {
+        const gap = Math.abs(t.x - x);
+        if (gap <= magnetRange(t) && (!best || gap < Math.abs(best.x - x))) best = t;
+      }
+      if (best && Math.abs(best.x - x) > 0.05) {
+        result.magnetFrom = Math.floor(x * 10) / 10;
+        if (events) events.push({ f: frames, type: 'magnet', x: best.x });
+        if (path) {
+          // A short slide into the bullseye for the replay.
+          const from = x;
+          for (let i = 1; i <= MAGNET_SLIDE; i++) {
+            const e = 1 - Math.pow(1 - i / MAGNET_SLIDE, 3);
+            path.push(from + (best.x - from) * e, 0);
+          }
+        }
+        frames += MAGNET_SLIDE;
+        x = best.x;
+      }
+    }
+
     const distance = x > 0 ? Math.floor(x * 10) / 10 : 0;
     result.distance = result.whiff ? 0 : distance;
     result.firstBounce = result.whiff ? 0 : Math.floor(firstBounce);
@@ -404,7 +539,7 @@
   }
 
   return {
-    RULES_VERSION, DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
+    RULES_VERSION, POWER_STREAK, POWER_BALLS, POWER_IDS, isPerfect, perfectRun, powerBallFor, magnetRange, DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
     KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,

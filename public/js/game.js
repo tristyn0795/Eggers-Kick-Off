@@ -89,6 +89,7 @@
       this.cfg = cfg;
       this.total = 0;
       this.best = 0;
+      this.history = []; // { perfect, power } per kick: 5 PERFECTs in a row earn a Power Ball
       this.r.setEquipped(cfg.equipped);
       this.setupKick(0);
       this.snapCamera();
@@ -128,6 +129,7 @@
         st,
         wind: P.windFor(seed),
         golden: P.isGoldenBall(seed),
+        power: this.mode === 'play' ? P.powerBallFor(seed, this.history) : this.mode === 'replay' ? (cfg.power || null) : null,
         objects: P.fieldObjects(seed, st.luck),
         juggler: P.createJuggler(seed, st),
         phase: 'juggle',
@@ -148,10 +150,15 @@
       this.r.setField(k.objects);
       this.r.particles = [];
       if (this.mode === 'play') {
-        this.hud.hint(k.golden
+        const pw = k.power && P.POWER_BALLS[k.power];
+        this.hud.hint(pw
+          ? `${pw.icon} POWER BALL: ${pw.name}! ${pw.desc}${k.golden ? ` And it's golden: ×${window.EKCatalog.GOLDEN_MULT} coins!` : ''}`
+          : k.golden
           ? `🌟 GOLDEN BALL — this kick pays ×${window.EKCatalog.GOLDEN_MULT} coins!`
           : 'Click, tap or press any key to kick — strike it in the green SWEET SPOT');
         this.hud.golden(k.golden);
+        if (this.hud.power) this.hud.power(k.power, P.perfectRun(this.history));
+        if (pw && sfx().levelUp) sfx().levelUp();
       }
     }
 
@@ -179,7 +186,8 @@
       const k = this.k;
       const cfg = this.cfg;
       const kickFrame = k.juggler.frame;
-      k.sim = P.simulateKick(k.seed, kickFrame, cfg.upgrades, { record: true });
+      k.sim = P.simulateKick(k.seed, kickFrame, cfg.upgrades, { record: true, power: k.power });
+      if (this.mode === 'play') this.history.push({ perfect: P.isPerfect(k.sim), power: k.power });
       k.kickFrame = kickFrame;
       k.contact = contactPose(k.sim.contactHeight);
       k.phase = 'swing';
@@ -283,6 +291,8 @@
         const e = ev[k.eventIdx++];
         if (e.type === 'pad') { sfx().pad(); this.r.burst('boing', e.x, 0.2, 14); this.hud.toastSmall('BOING! Bounce pad'); }
         else if (e.type === 'puddle') { sfx().splash(); this.r.burst('splash', e.x, 0.1, 18); this.hud.toastSmall('Splash! Puddle'); }
+        else if (e.type === 'crater') { sfx().kick(1); this.r.burst('crater', e.x, 0.1, 50); this.hud.toastSmall('☄️ IMPACT!'); }
+        else if (e.type === 'magnet') { sfx().pad(); this.r.burst('magnet', e.x, 0.3, 30); this.hud.toastSmall('🧲 Magnet pull… BULLSEYE!'); }
         else if (e.v > 2) { sfx().bounce(e.v); this.r.burst('dust', e.x, 0.05, 6); }
       }
       const pos = this.ballPos();
@@ -329,7 +339,11 @@
         challenges: res.challenges || null,
         index: k.index,
         henry: k.henryHappy,
+        power: sim.power || null,
+        magnetFrom: sim.magnetFrom,
       });
+      // Update the PERFECT streak only once the result is showing (no spoilers mid-flight).
+      if (this.mode === 'play' && !k.power && this.hud.power) this.hud.power(null, P.perfectRun(this.history));
     }
 
     // ---- Ball position ----------------------------------------------------
@@ -489,6 +503,7 @@
         jason: this.jasonPose(ball),
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
         golden: k.golden && this.mode === 'play',
+        power: k.power || null,
         henryHappy: k.phase === 'result' && !!k.henryHappy,
         henryBuddy: this.mode === 'attract',
         sweetWidth: k.st.sweetWidth,

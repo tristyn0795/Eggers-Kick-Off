@@ -30,6 +30,7 @@ beyond. There's no finish line: it's scored like **Topgolf**, with targets all d
   a **daily streak** bonus (50 × streak, max 350), level-up bonuses, 22 one-time **milestones** and Career boss bounties.
 - **Grind rewards:** 🔥 combos (consecutive GREAT/PERFECT kicks, up to ×3 coins), 🌟 Golden Balls (1 in 8, ×4 coins),
   🎖️ a veteran bonus (+1% coins per level above 10, max +150%) and a 🎁 Kick Crate after every round.
+- **Power Balls:** 5 PERFECT kicks in a row load a random Power Ball for the next kick: 🔥 Fireball (+35%), 🏀 Super Bouncy (+25%, tall bounces), ☄️ Meteor (+45%, craters) or 🧲 Magnet (pulls a nearby stop into the bullseye). Decided by the ball's seed and the round's kick history, so the server re-simulates them exactly (`P.powerBallFor`). Bump `RULES_VERSION` in `shared/physics.js` whenever kick rules change.
 - **Daily & weekly challenges** with goals scaled to each player's bests (landmark challenges pick spots in your range).
 - Prices are built for a long grind: each upgrade level costs 1.6× the last (maxing everything ≈ 284k coins) and
   cosmetics run up to 100k.

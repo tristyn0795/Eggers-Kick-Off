@@ -249,3 +249,60 @@ test('landmark challenges match the player\'s range', () => {
     }
   }
 });
+
+test('Power Balls: 5 PERFECT kicks in a row load one, and using it resets the count', () => {
+  const perfect = { perfect: true, power: null };
+  const miss = { perfect: false, power: null };
+  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, perfect, perfect]), null);
+  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, miss, perfect, perfect, perfect]), null);
+  const got = P.powerBallFor(123, [miss, perfect, perfect, perfect, perfect, perfect]);
+  assert.ok(P.POWER_IDS.includes(got));
+  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, perfect, perfect, perfect, { perfect: true, power: got }]), null);
+  // Every type turns up across seeds.
+  const seen = new Set();
+  for (let s = 0; s < 200; s++) seen.add(P.powerBallFor(s, Array(5).fill(perfect)));
+  assert.deepStrictEqual([...seen].sort(), [...P.POWER_IDS].sort());
+});
+
+test('Power Balls change the kick as advertised, at every level', () => {
+  for (const L of [0, 10, 50]) {
+    const up = { boots: L, ball: L, training: L, focus: L, aero: L, luck: L };
+    const seed = P.kickSeed(4242, 3);
+    let frame = 0, best = -1;
+    for (let f = 0; f < 240; f++) {
+      const d = P.simulateKick(seed, f, up).distance;
+      if (d > best) { best = d; frame = f; }
+    }
+    const base = P.simulateKick(seed, frame, up);
+    const fire = P.simulateKick(seed, frame, up, { power: 'fire', record: true });
+    const bouncy = P.simulateKick(seed, frame, up, { power: 'bouncy', record: true });
+    const meteor = P.simulateKick(seed, frame, up, { power: 'meteor', record: true });
+    const near = (a, b) => Math.abs(a - b) < 1;
+    assert.ok(near(fire.distance, P.BALL_X + (base.distance - P.BALL_X) * 1.35), `fire L${L}`);
+    assert.ok(near(bouncy.distance, P.BALL_X + (base.distance - P.BALL_X) * 1.25), `bouncy L${L}`);
+    assert.ok(near(meteor.distance, P.BALL_X + (base.distance - P.BALL_X) * 1.45), `meteor L${L}`);
+    assert.strictEqual(meteor.bounces, 0);
+    assert.strictEqual(meteor.events[0].type, 'crater');
+    // The drawn path ends where the result says.
+    for (const r of [fire, bouncy, meteor]) assert.ok(near(r.path[r.path.length - 2], r.distance), `${r.power} path end`);
+    // Same input, same answer (server and client must agree).
+    assert.deepStrictEqual(P.simulateKick(seed, frame, up, { power: 'meteor' }).distance, meteor.distance);
+    // Unknown power ids are ignored.
+    assert.strictEqual(P.simulateKick(seed, frame, up, { power: 'laser' }).distance, base.distance);
+  }
+});
+
+test('Magnet Ball pulls a nearby stop into the bullseye', () => {
+  let pulled = 0;
+  for (let s = 1; s < 400 && pulled < 5; s++) {
+    const seed = P.kickSeed(s, 0);
+    const base = P.simulateKick(seed, 60, {});
+    const mag = P.simulateKick(seed, 60, {}, { power: 'magnet', record: true });
+    if (mag.magnetFrom == null) { assert.strictEqual(mag.distance, base.distance); continue; }
+    pulled++;
+    assert.strictEqual(mag.magnetFrom, base.distance);
+    assert.ok(mag.target && mag.target.ring === 'BULLSEYE');
+    assert.ok(Math.abs(mag.path[mag.path.length - 2] - mag.distance) < 0.2);
+  }
+  assert.ok(pulled >= 3, 'found magnet pulls');
+});

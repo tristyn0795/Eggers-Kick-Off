@@ -444,9 +444,14 @@ async function main() {
       if (round.finished) throw new HttpError(409, 'Round already finished');
       if (index !== round.kicks.length) throw new HttpError(409, 'Kick out of order');
 
-      const result = P.simulateKick(P.kickSeed(round.baseSeed, index), frame, round.upgrades);
+      // 5 PERFECT kicks in a row earn a Power Ball on the next one.
+      const seed = P.kickSeed(round.baseSeed, index);
+      const power = P.powerBallFor(seed, round.kicks.map((k) => ({ perfect: !!k.q, power: k.pw || null })));
+      const result = P.simulateKick(seed, frame, round.upgrades, { power });
       const points = P.scoreKick(result, index, KICKS);
-      round.kicks.push({ f: frame, d: result.distance, p: points, t: result.target ? result.target.name : null });
+      const kick = { f: frame, d: result.distance, p: points, t: result.target ? result.target.name : null, q: P.isPerfect(result) ? 1 : 0 };
+      if (power) kick.pw = power;
+      round.kicks.push(kick);
       round.score += points;
       const done = round.kicks.length >= KICKS;
 
@@ -535,8 +540,8 @@ async function main() {
     const ticks = P.playbackTicks(result.flightFrames);
     const revealMs = Math.min(30000, Math.round((ticks / 60) * 1000) + 300);
     setTimeout(() => {
-      if (!player.banned && (result.distance >= 2500 || (result.target && (result.target.mult === 3 || result.target.office)))) {
-        broadcastAll({ t: 'feed', playerId: player.id, name: player.name, distance: result.distance, target: result.target, label: result.label });
+      if (!player.banned && (result.distance >= 2500 || result.power || (result.target && (result.target.mult === 3 || result.target.office)))) {
+        broadcastAll({ t: 'feed', playerId: player.id, name: player.name, distance: result.distance, target: result.target, label: result.label, power: result.power || null });
       }
       if (round.room) roomKick(round.room, player, round, points, result);
     }, revealMs);
@@ -549,7 +554,7 @@ async function main() {
       },
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,
-        quality: result.quality, target: result.target, whiff: result.whiff,
+        quality: result.quality, target: result.target, whiff: result.whiff, power: result.power || null,
       },
       player: publicPlayer(player),
     };
@@ -672,7 +677,7 @@ async function main() {
     if (result.distance > m.best) m.best = result.distance;
     roomBroadcast(room, {
       t: 'room:kick', id: player.id, name: player.name, index: round.kicks.length - 1, points,
-      distance: result.distance, target: result.target, label: result.label,
+      distance: result.distance, target: result.target, label: result.label, power: result.power || null,
     });
     maybeFinishRoom(room);
     roomSync(room);

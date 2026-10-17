@@ -113,6 +113,9 @@
     { id: 'pr5', name: 'Five Star Kicker', desc: 'Reach prestige 5', reward: 50000, prestige: 5 },
     { id: 'pr10', name: 'Prestige Legend', desc: 'Reach prestige 10', reward: 200000, prestige: 10 },
     { id: 'perfect', name: 'Perfect Strike', desc: 'Land a PERFECT kick', reward: 150, label: 'PERFECT!' },
+    { id: 'powerup', name: 'Powered Up', desc: 'Land 5 PERFECT kicks in a row to earn a Power Ball', reward: 750, power: 'any' },
+    { id: 'meteor', name: 'Extinction Event', desc: 'Kick a ☄️ Meteor', reward: 500, power: 'meteor' },
+    { id: 'magnetbull', name: 'Magnetic Personality', desc: 'Pull a 🧲 Magnet Ball into a bullseye', reward: 1000, power: 'magnet', ring: 'BULLSEYE' },
     { id: 'target', name: 'On Target', desc: 'Stop the ball in any target', reward: 100, anyTarget: true },
     { id: 'henry', name: "Henry's Friend", desc: 'Stop the ball in the Duck Pond', reward: 250, target: 'Duck Pond' },
     { id: 'restroom', name: 'Nature Calls', desc: 'Stop the ball at the Watters Creek Bathrooms', reward: 400, target: 'Watters Creek Bathrooms' },
@@ -278,7 +281,8 @@
       else if (ev.kick) {
         const k = ev.kick;
         const t = k.target;
-        if (m.label) ok = k.label === m.label;
+        if (m.power) ok = !!k.power && (m.power === 'any' || k.power === m.power) && (!m.ring || (!!t && t.ring === m.ring && k.magnetFrom != null));
+        else if (m.label) ok = k.label === m.label;
         else if (m.anyTarget) ok = !!t;
         else if (m.target && m.ring) ok = !!t && t.name === m.target && t.ring === m.ring;
         else if (m.target) ok = !!t && t.name === m.target;

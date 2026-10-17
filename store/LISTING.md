@@ -33,6 +33,7 @@ target down the field. There's no finish line. Upgrade, prestige and keep kickin
 • One tap to kick. Timing is everything: PERFECT kicks fly.
 • Wind, bounce pads and puddles change every ball.
 • Golden Balls pay ×4 coins. Chain great kicks for combos up to ×3.
+• Land 5 PERFECT kicks in a row for a Power Ball: Fireball, Super Bouncy, Meteor or Magnet.
 
 🏆 CAREER MODE
 • Take on 12 bosses across the Amateur League, Semi-Pro Circuit, Pro Tour and Legends.

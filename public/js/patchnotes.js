@@ -1,6 +1,32 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.7.0',
+    date: '17 Oct 2026',
+    title: 'Power Balls! 🔥🏀☄️🧲',
+    sections: [
+      {
+        heading: '⚡ New: Power Balls (thanks John!)',
+        items: [
+          'Land 5 PERFECT kicks in a row and your next ball is a random Power Ball. Watch the new PERFECT 0/5 counter in the score bar.',
+          '🔥 Fireball: rockets 35% further.',
+          '🏀 Super Bouncy Ball: huge bounces that carry it 25% further.',
+          '☄️ Meteor: one giant arc 45% further, then it craters where it lands: no bounce, no roll.',
+          '🧲 Magnet Ball: if it stops near a target, it gets pulled into the bullseye for triple points.',
+          'Using a Power Ball resets the count, so you earn every one. Power Balls stack with Golden Balls and combos.',
+        ],
+      },
+      {
+        heading: '🏆 Career & more',
+        items: [
+          'Career bosses play by the same rules: a boss that lands 5 PERFECTs gets a Power Ball too.',
+          'Power Ball kicks show up in the live feed and multiplayer rooms, and replays show the right ball.',
+          'New milestones: Powered Up, Extinction Event (kick a Meteor) and Magnetic Personality (Magnet bullseye).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.6.0',
     date: '16 Oct 2026',
     title: 'Getting ready for the app stores 📲',

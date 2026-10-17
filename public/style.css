@@ -591,3 +591,13 @@ body { -webkit-text-size-adjust: 100%; }
 #deleteConfirm { width: 100%; }
 .menu-buttons .row.links { flex-wrap: wrap; row-gap: 0; }
 @media (max-width: 560px) { .menu-buttons .row.links button.link { font-size: 14px; padding: 4px 3px; } }
+
+/* ---- v1.7: Power Balls ---- */
+.hud-pill.power b { color: #6a1b9a; }
+.hud-pill.power.armed { background: linear-gradient(135deg, #ff9800, #e64a19); box-shadow: 0 0 0 3px #ffcc80, 0 3px 12px rgba(230, 74, 25, 0.5); animation: power-pulse 0.9s ease-in-out infinite alternate; }
+.hud-pill.power.armed .lbl, .hud-pill.power.armed b { color: #fff; }
+@keyframes power-pulse { from { transform: scale(1); } to { transform: scale(1.07); } }
+#hud.powered #hint { color: #ffe0b2; font-weight: 900; }
+.power-gain { color: #e65100; font-weight: 900; }
+@media (prefers-reduced-motion: reduce) { .hud-pill.power.armed { animation: none; } }
+@media (max-width: 420px) { .hud-pill.power .pw-name { display: none; } }

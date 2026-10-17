@@ -80,19 +80,26 @@
     return { boots: L, ball: L, training: L, focus: L, aero: L, luck: L };
   }
 
-  /** The boss's kick on ball `i` of a round. Deterministic, and cheap enough to reveal one at a time. */
-  function cpuKick(baseSeed, boss, i, playerUpgrades) {
+  /**
+   * The boss's kick on ball `i` of a round. Deterministic, and cheap enough to reveal one at a time.
+   * `history` is the boss's earlier kicks this round: bosses earn Power Balls by the same rule as you.
+   */
+  function cpuKick(baseSeed, boss, i, playerUpgrades, history) {
     const gear = gearFor(boss, playerUpgrades);
     const rng = P.mulberry32(P.hashSeed(P.hashSeed(baseSeed >>> 0, P.hashSeed(boss.rating, 0xB055)), i));
     const seed = P.kickSeed(baseSeed, i);
+    const power = P.powerBallFor(seed, history || []);
     const options = [];
-    for (let f = 0; f < CPU_FRAMES; f += 2) options.push(P.simulateKick(seed, f, gear));
+    for (let f = 0; f < CPU_FRAMES; f += 2) options.push(P.simulateKick(seed, f, gear, { power }));
     options.sort((a, b) => b.distance - a.distance);
     // Higher accuracy picks closer to the best possible kick on that ball.
     const spread = (1 - boss.accuracy) * 0.7;
     const rank = Math.min(options.length - 1, Math.floor(options.length * spread * (0.3 + rng() * 1.4)));
     const r = options[rank];
-    return { distance: r.distance, points: P.scoreKick(r, i, P.KICKS_PER_ROUND), target: r.target, label: r.label };
+    return {
+      distance: r.distance, points: P.scoreKick(r, i, P.KICKS_PER_ROUND), target: r.target, label: r.label,
+      perfect: P.isPerfect(r), power: power,
+    };
   }
 
   /** The boss's 10 kicks for a round seed. */
@@ -100,7 +107,7 @@
     const kicks = [];
     let total = 0;
     for (let i = 0; i < P.KICKS_PER_ROUND; i++) {
-      const k = cpuKick(baseSeed, boss, i, playerUpgrades);
+      const k = cpuKick(baseSeed, boss, i, playerUpgrades, kicks);
       total += k.points;
       kicks.push(k);
     }

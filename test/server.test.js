@@ -65,10 +65,13 @@ test('full online flow: profile, round, leaderboard, shop, challenge', async () 
 
   let total = 0;
   let last;
+  const history = [];
   for (let i = 0; i < 10; i++) {
     const seed = P.kickSeed(baseSeed, i);
     const frame = bestFrame(seed, upgrades);
-    const local = P.simulateKick(seed, frame, upgrades);
+    const power = P.powerBallFor(seed, history);
+    const local = P.simulateKick(seed, frame, upgrades, { power });
+    history.push({ perfect: P.isPerfect(local), power });
     last = await api('/api/round/kick', { roundId, index: i, frame }, token);
     assert.strictEqual(last.status, 200, JSON.stringify(last.body));
     assert.strictEqual(last.body.result.distance, local.distance, 'server agrees with client physics');
@@ -371,4 +374,36 @@ test('health reports the game rules version (app update guard)', async () => {
   const h = await api('/api/health');
   assert.strictEqual(h.body.rules, P.RULES_VERSION);
   assert.ok(P.RULES_VERSION >= 1);
+});
+
+test('Power Balls are earned and simulated by the server', async () => {
+  // A different client IP, so the sign-up rate limit from earlier tests doesn't apply.
+  const created = await fetch(BASE + '/api/player', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.9.9.9' }, body: JSON.stringify({ name: 'Perfect Pete' }),
+  });
+  const { token } = await created.json();
+  const st = (await api('/api/round/start', {}, token)).body;
+  const history = [];
+  let powered = null;
+  for (let i = 0; i < 7; i++) {
+    const seed = P.kickSeed(st.baseSeed, i);
+    const power = P.powerBallFor(seed, history);
+    // Find a PERFECT frame for this ball, as a sharp player would.
+    let frame = 0;
+    for (let f = 0; f < 600; f++) {
+      if (P.isPerfect(P.simulateKick(seed, f, st.upgrades, { power }))) { frame = f; break; }
+    }
+    const local = P.simulateKick(seed, frame, st.upgrades, { power });
+    const r = await api('/api/round/kick', { roundId: st.roundId, index: i, frame }, token);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.result.distance, local.distance, `kick ${i} agrees`);
+    assert.strictEqual(r.body.result.power, power);
+    if (power) powered = { i, power };
+    history.push({ perfect: P.isPerfect(local), power });
+  }
+  assert.ok(powered, 'a Power Ball was loaded');
+  assert.strictEqual(powered.i, 5, 'right after 5 PERFECTs');
+  const round = await api(`/api/round/${st.roundId}`);
+  assert.strictEqual(round.body.kicks[5].pw, powered.power, 'replays know the power');
+  assert.strictEqual(round.body.kicks[6].pw, undefined);
 });
