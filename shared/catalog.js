@@ -52,6 +52,10 @@
     { id: 'ceo', name: 'Click Wise CEO', cost: 55000, level: 23, shirt: '#047dc3', shorts: '#0b2f4a', socks: '#0b2f4a', pattern: 'suit', alt: '#ffffff', tie: '#4caf50', pants: true, longSleeves: true, shoe: '#111111' },
     { id: 'platinumgi', name: 'Platinum Gi', cost: 0, level: 1, prestige: 3, shirt: '#e5e4e2', shorts: '#e5e4e2', socks: '#e5e4e2', pattern: 'gi', belt: '#7e57c2', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
     { id: 'legendgi', name: 'Eggers Legend Gi', cost: 400000, level: 50, shirt: '#ffd54f', shorts: '#ffd54f', socks: '#ffd54f', pattern: 'gi', belt: '#111111', beltTip: '#c62828', medal: 'gold', pants: true, longSleeves: true, sandals: true },
+    // 🎃 Spooky Season (limited time: buyable 1 Oct – 7 Nov, yours to keep forever)
+    { id: 'pumpkintee', name: 'Pumpkin Patch Tee', cost: 2500, level: 2, season: 'halloween', shirt: '#ef6c00', shorts: '#212121', socks: '#ef6c00', pattern: 'pumpkin', alt: '#1a1a1a' },
+    { id: 'skeleton', name: 'Skele-Jason', cost: 6000, level: 5, season: 'halloween', shirt: '#151515', shorts: '#151515', socks: '#151515', pattern: 'skeleton', alt: '#f5f5f0', pants: true, longSleeves: true, bones: true, shoe: '#151515' },
+    { id: 'vampire', name: 'Count Jasonula', cost: 12000, level: 9, season: 'halloween', shirt: '#111111', shorts: '#111111', socks: '#111111', pattern: 'suit', alt: '#ffffff', tie: '#b71c1c', pants: true, longSleeves: true, shoe: '#000000', cape: '#b71c1c' },
     { id: 'cosmicsuit', name: 'Cosmic Suit', cost: 2000000, level: 100, shirt: '#311b92', shorts: '#1a237e', socks: '#1a237e', pattern: 'suit', alt: '#b388ff', tie: '#ffd54f', pants: true, longSleeves: true, shoe: '#000000' },
   ];
 
@@ -70,6 +74,7 @@
     { id: 'star', name: 'Prestige Star Ball', cost: 0, level: 1, prestige: 1, base: '#fffdf5', patch: '#ffc107', style: 'star' },
     { id: 'diamond', name: 'Diamond Ball', cost: 0, level: 1, prestige: 5, base: '#b2ebf2', patch: '#ffffff', style: 'diamond' },
     { id: 'galaxy', name: 'Galaxy Ball', cost: 250000, level: 40, base: '#1a0b3d', patch: '#b388ff', style: 'galaxy' },
+    { id: 'jackoball', name: "Jack-o'-Ball", cost: 4000, level: 3, season: 'halloween', base: '#ff8f00', patch: '#3e2723', style: 'jackoball' },
     { id: 'blackhole', name: 'Black Hole Ball', cost: 1000000, level: 80, base: '#000000', patch: '#ff9100', style: 'blackhole' },
   ];
 
@@ -86,6 +91,8 @@
     { id: 'aura', name: 'Prestige Aura', cost: 0, level: 1, prestige: 2 },
     { id: 'supernova', name: 'Supernova', cost: 0, level: 1, prestige: 10 },
     { id: 'cosmic', name: 'Cosmic Dust', cost: 500000, level: 60 },
+    { id: 'bats', name: 'Bat Swarm', cost: 3000, level: 3, season: 'halloween' },
+    { id: 'ghosts', name: 'Ghost Trail', cost: 8000, level: 7, season: 'halloween' },
   ];
 
   // One-time rewards. Checked after every kick and every round.
@@ -114,6 +121,7 @@
     { id: 'pr10', name: 'Prestige Legend', desc: 'Reach prestige 10', reward: 200000, prestige: 10 },
     { id: 'perfect', name: 'Perfect Strike', desc: 'Land a PERFECT kick', reward: 150, label: 'PERFECT!' },
     { id: 'powerup', name: 'Powered Up', desc: 'Land 5 PERFECT kicks in a row to earn a Power Ball', reward: 750, power: 'any' },
+    { id: 'pinata', name: 'Fiesta!', desc: 'Land 9 PERFECT kicks in a row and smash a 🪅 Piñata', reward: 2000, power: 'pinata' },
     { id: 'meteor', name: 'Extinction Event', desc: 'Kick a ☄️ Meteor', reward: 500, power: 'meteor' },
     { id: 'magnetbull', name: 'Magnetic Personality', desc: 'Pull a 🧲 Magnet Ball into a bullseye', reward: 1000, power: 'magnet', ring: 'BULLSEYE' },
     { id: 'target', name: 'On Target', desc: 'Stop the ball in any target', reward: 100, anyTarget: true },
@@ -236,6 +244,105 @@
     return { id: crate.id, name: crate.name, icon: crate.icon, coins };
   }
 
+  // ---- Seasons ---------------------------------------------------------------
+  const SEASONS = {
+    halloween: { id: 'halloween', name: 'Spooky Season', icon: '🎃', from: [10, 1], to: [11, 7] },
+  };
+  /** Is a limited-time season on (UTC dates, inclusive)? */
+  function seasonActive(id, now) {
+    const s = SEASONS[id];
+    if (!s) return false;
+    const d = new Date(now == null ? Date.now() : now);
+    const md = (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+    return md >= s.from[0] * 100 + s.from[1] && md <= s.to[0] * 100 + s.to[1];
+  }
+
+  // ---- Piñata Ball (9 PERFECT kicks in a row) ----------------------------------
+  const BOOST_LEVELS = 5;
+  const BOOST_ROUNDS = 2;
+  const PINATA_PRIZES = [
+    { id: 'coins', weight: 35 },
+    { id: 'upgrade', weight: 25 },
+    { id: 'boost', weight: 25 },
+    { id: 'item', weight: 15 },
+  ];
+
+  function pinataRng(key) {
+    let x = hashString(`pinata:${key}`);
+    return () => {
+      x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+      return x / 4294967296;
+    };
+  }
+
+  /**
+   * Break open a Piñata: one prize, fixed by `key` (round + kick), so it can't be re-rolled.
+   * Pays the profile and returns what it got. Falls back to coins when a prize can't apply.
+   */
+  function openPinata(profile, key, now) {
+    const rnd = pinataRng(key);
+    const level = levelFromXp(profile.xp || 0);
+    const total = PINATA_PRIZES.reduce((n, p) => n + p.weight, 0);
+    let roll = rnd() * total;
+    let kind = PINATA_PRIZES[0].id;
+    for (const p of PINATA_PRIZES) { if (roll < p.weight) { kind = p.id; break; } roll -= p.weight; }
+    const pick = (list) => list[Math.floor(rnd() * list.length)];
+
+    if (kind === 'upgrade') {
+      // A free level on an upgrade you're allowed to buy next.
+      const ok = UPGRADES.filter((u) => {
+        const cur = (profile.upgrades && profile.upgrades[u.id]) | 0;
+        return cur < MAX_UPGRADE && level >= UPGRADE_LEVEL_REQ[cur];
+      });
+      if (ok.length) {
+        const u = pick(ok);
+        const lv = ((profile.upgrades && profile.upgrades[u.id]) | 0) + 1;
+        profile.upgrades = Object.assign({}, profile.upgrades, { [u.id]: lv });
+        return { type: 'upgrade', id: u.id, name: u.name, icon: u.icon, level: lv };
+      }
+    } else if (kind === 'boost') {
+      // +5 levels on one upgrade for your next 2 rounds (not Career).
+      const ok = UPGRADES.filter((u) => ((profile.upgrades && profile.upgrades[u.id]) | 0) < MAX_UPGRADE);
+      if (ok.length) {
+        const u = pick(ok);
+        profile.boost = { id: u.id, levels: BOOST_LEVELS, rounds: BOOST_ROUNDS };
+        return { type: 'boost', id: u.id, name: u.name, icon: u.icon, levels: BOOST_LEVELS, rounds: BOOST_ROUNDS };
+      }
+    } else if (kind === 'item') {
+      // A random outfit, ball or trail you don't have yet.
+      const ok = [];
+      for (const [slot, list] of Object.entries(SLOTS)) {
+        for (const it of list) {
+          if (it.career || it.prestige || it.cost === 0 || it.level > level + 10) continue;
+          if (it.season && !seasonActive(it.season, now)) continue;
+          if (!isOwned(profile, slot, it.id)) ok.push({ slot, it });
+        }
+      }
+      if (ok.length) {
+        const { slot, it } = pick(ok);
+        profile.owned = (profile.owned || []).concat(`${slot}:${it.id}`);
+        return { type: 'item', slot, id: it.id, name: it.name };
+      }
+    }
+    const coins = Math.round(((60 + 25 * level) * (4 + Math.floor(rnd() * 5)) * prestigeCoinMult(profile.prestige)) / 10) * 10;
+    profile.coins += coins;
+    return { type: 'coins', coins };
+  }
+
+  /**
+   * Upgrades to use for a new round, including an active Piñata boost (which uses up one of
+   * its rounds). Returns { upgrades, boost } where boost is what was applied (or null).
+   */
+  function useBoost(profile, upgrades) {
+    const b = profile.boost;
+    if (!b || !b.id || !(b.rounds > 0)) return { upgrades, boost: null };
+    const out = Object.assign({}, upgrades);
+    out[b.id] = Math.min(MAX_UPGRADE, ((out[b.id] | 0) + (b.levels | 0)));
+    const left = b.rounds - 1;
+    profile.boost = left > 0 ? Object.assign({}, b, { rounds: left }) : null;
+    return { upgrades: out, boost: { id: b.id, levels: b.levels, roundsLeft: left } };
+  }
+
   function utcDay(ts) {
     return new Date(ts).toISOString().slice(0, 10);
   }
@@ -303,7 +410,7 @@
     for (let L = level + 1; L <= level + 15; L++) {
       const items = [];
       for (const [slot, list] of Object.entries(SLOTS)) {
-        for (const it of list) if (it.level === L) items.push(it.name);
+        for (const it of list) if (it.level === L && (!it.season || seasonActive(it.season))) items.push(it.name);
       }
       UPGRADE_LEVEL_REQ.forEach((req, i) => { if (req === L && i > 0) items.push(`Upgrade level ${i + 1}`); });
       if (items.length) return { level: L, items };
@@ -368,6 +475,7 @@
     if (isOwned(profile, kind, id)) return 'Already owned';
     if (item.career) return 'Earn this by going Pro in Career mode';
     if (item.prestige) return `Reach prestige ⭐${item.prestige} to unlock this`;
+    if (item.season && !seasonActive(item.season)) return `${SEASONS[item.season].icon} Limited edition: back next ${SEASONS[item.season].name}`;
     if (level < item.level) return `Reach level ${item.level} first`;
     if (profile.coins < item.cost) return 'Not enough coins';
     profile.coins -= item.cost;
@@ -409,6 +517,7 @@
     totalUpgradeLevels, prestigeRequirement, prestigeCoinMult, prestigeRewardsAt, applyPrestige,
     GOLDEN_MULT, COMBO_STEP, COMBO_MAX, VETERAN_FROM_LEVEL, VETERAN_MAX, CRATES,
     comboMult, veteranMult, isGoodKick, openCrate,
+    SEASONS, seasonActive, openPinata, useBoost, BOOST_LEVELS, BOOST_ROUNDS,
     applyPurchase, applyEquip, newProfile,
   };
 });

@@ -163,6 +163,16 @@
       const ff = inFlight && !s.fast && s.mode === 'play';
       if (this.last.ff !== ff) { this.last.ff = ff; $('#ffHint').classList.toggle('hidden', !ff); }
       this.track(Math.max(0, s.ballX));
+      // Split Shot: a second marker for the other ball.
+      const b2 = s.ball2X != null ? `${Math.min(100, (Math.max(0, s.ball2X) / this.range) * 100).toFixed(2)}%` : '';
+      if (this.last.b2 !== b2) {
+        this.last.b2 = b2;
+        const el = $('#trackBall2');
+        if (el) {
+          el.classList.toggle('hidden', !b2);
+          if (b2) el.style.left = b2;
+        }
+      }
     },
     track(x) {
       const range = Math.min(P.FIELD_LENGTH, Math.max(4500, Math.ceil((x + 400) / (x > 20000 ? 10000 : 1000)) * (x > 20000 ? 10000 : 1000)));
@@ -212,11 +222,15 @@
       }
       const pw = r.power && P.POWER_BALLS[r.power];
       if (pw) {
-        const what = r.power === 'magnet'
-          ? (r.magnetFrom ? `pulled in from ${fmtM(r.magnetFrom)}` : 'no target close enough')
-          : r.power === 'fire' ? '+35% distance' : r.power === 'bouncy' ? '+25% distance' : '+45% distance';
-        sub.push(`<span class="power-gain">${pw.icon} ${esc(pw.name)}: ${what}</span>`);
+        const what = {
+          magnet: r.magnetFrom ? `pulled in from ${fmtM(r.magnetFrom)}` : 'no target close enough',
+          fire: '+35% distance', bouncy: '+25% distance', meteor: '+45% distance',
+          split: r.split ? `second ball ${fmtM(r.split.distance)}${r.split.target ? ` · 🎯 ${esc(r.split.target.ring.toLowerCase())} at ${esc(r.split.target.name)}` : ''}` : '',
+          pinata: 'cracked open!',
+        }[r.power] || '';
+        sub.push(`<span class="power-gain">${pw.icon} ${esc(pw.name)}${what ? `: ${what}` : ''}</span>`);
       }
+      if (r.pinata) sub.push(`<span class="best">${pinataText(r.pinata)}</span>`);
       if (r.newBestKick) sub.push('<span class="best">★ NEW PERSONAL BEST</span>');
       $('#resSub').innerHTML = sub.join(' · ');
       const ms = r.milestones || [];
@@ -262,8 +276,12 @@
       pill.classList.toggle('armed', !!pw);
       $('#hud').classList.toggle('powered', !!pw);
       $('#hudPowerLbl').textContent = pw ? 'POWER' : 'PERFECT';
-      $('#hudPower').innerHTML = pw ? `${pw.icon}<span class="pw-name"> ${pw.short}</span>` : `${run}/${P.POWER_STREAK}`;
-      pill.title = pw ? pw.desc : `${P.POWER_STREAK} PERFECT kicks in a row load a Power Ball`;
+      const next = P.nextPowerAt(run || 0);
+      const pinataNext = next % P.PINATA_STREAK === 0;
+      $('#hudPower').innerHTML = pw ? `${pw.icon}<span class="pw-name"> ${pw.short}</span>` : `${run}/${next}${pinataNext ? '<span class="pw-name"> 🪅</span>' : ''}`;
+      pill.title = pw ? pw.desc : pinataNext
+        ? `${P.PINATA_STREAK} PERFECT kicks in a row break out the Piñata Ball`
+        : `${P.POWER_STREAK} PERFECT kicks in a row load a Power Ball`;
     },
     countCoins(amount) {
       if (!amount) return;
@@ -581,6 +599,7 @@
   async function startRanked(challenge) {
     try {
       const r = await api('/api/round/start', challenge ? { challengeOf: challenge.id } : {});
+      announceBoost(r.boost);
       beginOnlineRound({
         kind: challenge ? 'challenge' : 'ranked', roundId: r.roundId, baseSeed: r.baseSeed, upgrades: r.upgrades,
         beat: challenge ? challenge.score : null, challenge,
@@ -588,6 +607,23 @@
     } catch (e) {
       toast(e.message, 'error');
     }
+  }
+
+  /** A Piñata boost kicked in for this round. */
+  function announceBoost(b) {
+    if (!b) return;
+    const up = C.UPGRADES.find((u) => u.id === b.id);
+    toast(`⚡ Piñata boost: +${b.levels} ${up ? `${up.icon} ${up.name}` : b.id} this round${b.roundsLeft ? ` (${b.roundsLeft} more after this)` : ''}`, 'good');
+  }
+
+  /** Describe a Piñata prize for the result card. */
+  function pinataText(z) {
+    if (!z) return '';
+    if (z.type === 'coins') return `🪅 Piñata: +${fmt(z.coins)} 🪙`;
+    if (z.type === 'upgrade') return `🪅 Piñata: free upgrade! ${z.icon} ${esc(z.name)} → Lv ${z.level}`;
+    if (z.type === 'boost') return `🪅 Piñata: ⚡ +${z.levels} ${z.icon} ${esc(z.name)} for your next ${z.rounds} rounds`;
+    if (z.type === 'item') return `🪅 Piñata: new ${z.slot}! ${esc(z.name)} (equip it in the Locker)`;
+    return '';
   }
 
   /** Career match vs a boss. Online (server-verified) when signed in, otherwise on the offline profile. */
@@ -693,13 +729,19 @@
     const baseSeed = (Math.random() * 2 ** 32) >>> 0;
     const cur = { kind: boss ? 'career' : endless ? 'freekick' : 'casual', kicks: [], milestones: [], challenges: [], offline: true };
     if (boss) attachBoss(cur, boss, baseSeed, Object.assign({}, prof.upgrades));
+    let upgrades = Object.assign({}, prof.upgrades, prof.prestige ? { prestige: prof.prestige | 0 } : {});
+    if (!boss) {
+      const used = C.useBoost(prof, upgrades);
+      upgrades = used.upgrades;
+      if (used.boost) { saveOffline(); announceBoost(used.boost); }
+    }
     S.current = cur;
     let total = 0;
     hideScreens();
     hud.show('play', { vs: boss });
     game.startRound({
       baseSeed,
-      upgrades: Object.assign({}, prof.upgrades, prof.prestige ? { prestige: prof.prestige | 0 } : {}),
+      upgrades,
       equipped: prof.equipped,
       kicks,
       submit: (index, frame, sim, pts) => {
@@ -710,12 +752,13 @@
         cur.kicks.push({ d: sim.distance, p: pts, t: sim.target, c: earned.coins, lb: earned.levelBonus });
         const newBestKick = sim.distance > prof.bestKick;
         if (newBestKick) prof.bestKick = sim.distance;
+        const pinata = sim.power === 'pinata' ? C.openPinata(prof, `offline:${baseSeed}:${index}`) : null;
         const milestones = C.checkMilestones(prof, { kick: sim });
         cur.milestones.push(...milestones);
         const challenges = CH.progress(prof, { kick: sim });
         cur.challenges.push(...challenges);
         saveOffline();
-        return { points: pts, total, newBestKick, milestones, challenges, earned, done: false };
+        return { points: pts, total, newBestKick, milestones, challenges, earned, pinata, done: false };
       },
       onEnd: () => {
         prof.coins += C.ROUND_COMPLETION_COINS;
@@ -1158,7 +1201,11 @@
     } else {
       const list = C.SLOTS[S.shopTab];
       const eq = Object.assign({}, C.DEFAULT_EQUIPPED, prof.equipped);
-      grid.innerHTML = list.slice().sort((a, b) => a.level - b.level).map((it) => {
+      // Limited-time seasonal gear comes first while its season is on.
+      const seasonal = (it) => (it.season && C.seasonActive(it.season) ? 0 : 1);
+      grid.innerHTML = list.slice()
+        .filter((it) => !it.season || C.seasonActive(it.season) || C.isOwned(prof, S.shopTab, it.id))
+        .sort((a, b) => seasonal(a) - seasonal(b) || a.level - b.level).map((it) => {
         const key = `${S.shopTab}:${it.id}`;
         const owned = C.isOwned(prof, S.shopTab, it.id);
         const isEq = eq[S.shopTab] === it.id;
@@ -1169,18 +1216,40 @@
         else if (it.prestige) btn = `<button disabled>⭐ Prestige ${it.prestige}</button>`;
         else if (level < it.level) btn = `<button disabled>🔒 Level ${it.level}</button>`;
         else btn = `<button data-buy="${key}" ${prof.coins < it.cost ? 'disabled' : ''}>Buy · 🪙 ${fmt(it.cost)}</button>`;
-        return `<div class="item ${isEq ? 'equipped' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}</div></div>${btn}</div>`;
+        const season = it.season && C.SEASONS[it.season];
+        const tag = season ? `<span class="season-tag" title="Limited edition: buy it during ${esc(season.name)}, keep it forever">${season.icon} Limited</span>` : '';
+        return `<div class="item ${isEq ? 'equipped' : ''} ${season ? 'seasonal' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}${tag}</div></div>${btn}</div>`;
       }).join('');
+      const live = Object.values(C.SEASONS).find((x) => C.seasonActive(x.id));
+      if (live && S.shopTab !== 'upgrades') {
+        grid.insertAdjacentHTML('afterbegin', `<div class="season-banner">${live.icon} <b>${esc(live.name)}</b> is here! Limited gear is in the shop until ${live.to[1]} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][live.to[0] - 1]}. Whatever you buy is yours to keep.</div>`);
+      }
     }
   }
 
+  /** "🥋 Black Gi · 🎃 Jack-o'-Ball · 🦇 Bat Swarm": what a kicker is wearing, for the leaderboard. */
+  function gearLine(eq) {
+    if (!eq) return '';
+    const parts = [];
+    for (const slot of ['outfit', 'ball', 'trail']) {
+      const it = (C.SLOTS[slot] || []).find((x) => x.id === eq[slot]);
+      if (!it || (slot === 'trail' && it.id === 'none')) continue;
+      const icon = itemIcon(slot, it).replace(/<[^>]+>/g, '');
+      parts.push(`${icon} ${esc(it.name.replace(/\s*[\u{1F300}-\u{1FAFF}]$/u, ''))}`);
+    }
+    return parts.length ? `<span class="lb-gear" title="${parts.join(' · ')}">${parts.join(' · ')}</span>` : '';
+  }
+
   function itemIcon(slot, it) {
-    if (slot === 'outfit') return `<span class="icon" style="background:${it.shirt}">${it.pattern === 'gi' ? '🥋' : it.id === 'astro' ? '🧑‍🚀' : it.id === 'suit' ? '👔' : '👕'}</span>`;
+    if (slot === 'outfit') {
+      const special = { astro: '🧑‍🚀', suit: '👔', pumpkintee: '🎃', skeleton: '💀', vampire: '🧛' };
+      return `<span class="icon" style="background:${it.shirt}">${special[it.id] || (it.pattern === 'gi' ? '🥋' : '👕')}</span>`;
+    }
     if (slot === 'ball') {
-      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆', galaxy: '🌌', blackhole: '🕳️', star: '⭐', diamond: '💎' };
+      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆', galaxy: '🌌', blackhole: '🕳️', star: '⭐', diamond: '💎', jackoball: '🎃' };
       return `<span class="icon" style="background:${it.base}">${icons[it.style] || '⚽'}</span>`;
     }
-    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️', cosmic: '🌠', aura: '💫', supernova: '💥' };
+    const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️', cosmic: '🌠', aura: '💫', supernova: '💥', bats: '🦇', ghosts: '👻' };
     return `<span class="icon">${icons[it.id] || '✨'}</span>`;
   }
 
@@ -1307,7 +1376,7 @@
         else if (r.roundId && type !== 'kick' && !me) act = `<button data-challenge="${esc(r.roundId)}" title="Play the same 10 kicks">⚔️ Beat it</button>`;
         const medal = ['🥇', '🥈', '🥉'][i] || i + 1;
         const more = me ? '' : `<button class="mini-btn" data-player="${esc(r.playerId)}" data-pname="${esc(r.name)}" title="Report or block" aria-label="Report or block ${esc(r.name)}">⋯</button>`;
-        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}${stars(r.prestige)}<span class="lvl">${r.level}</span></td><td class="val">${val}</td><td class="act">${act}${more}</td></tr>`;
+        return `<tr class="${me ? 'me' : ''}"><td class="rank">${medal}</td><td>${esc(r.name)}${stars(r.prestige)}<span class="lvl">${r.level}</span>${gearLine(r.equipped)}</td><td class="val">${val}</td><td class="act">${act}${more}</td></tr>`;
       }).join('');
     } catch (e) {
       table.innerHTML = `<tr><td class="error">${esc(e.message)}</td></tr>`;

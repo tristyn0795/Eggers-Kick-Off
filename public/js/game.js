@@ -292,6 +292,8 @@
         if (e.type === 'pad') { sfx().pad(); this.r.burst('boing', e.x, 0.2, 14); this.hud.toastSmall('BOING! Bounce pad'); }
         else if (e.type === 'puddle') { sfx().splash(); this.r.burst('splash', e.x, 0.1, 18); this.hud.toastSmall('Splash! Puddle'); }
         else if (e.type === 'crater') { sfx().kick(1); this.r.burst('crater', e.x, 0.1, 50); this.hud.toastSmall('☄️ IMPACT!'); }
+        else if (e.type === 'pinata') { sfx().target(3); this.r.burst('confetti', e.x, 0.4, 70); this.r.burst('candy', e.x, 0.3, 40); this.hud.toastSmall('🪅 CRACK! The piñata bursts open!'); }
+        else if (e.type === 'split') { sfx().pad(); this.r.burst('kick', e.x, this.ballPos().y, 14); this.hud.toastSmall('✂️ SPLIT!'); }
         else if (e.type === 'magnet') { sfx().pad(); this.r.burst('magnet', e.x, 0.3, 30); this.hud.toastSmall('🧲 Magnet pull… BULLSEYE!'); }
         else if (e.v > 2) { sfx().bounce(e.v); this.r.burst('dust', e.x, 0.05, 6); }
       }
@@ -341,6 +343,8 @@
         henry: k.henryHappy,
         power: sim.power || null,
         magnetFrom: sim.magnetFrom,
+        split: result.split || sim.split || null,
+        pinata: res.pinata || null,
       });
       // Update the PERFECT streak only once the result is showing (no spoilers mid-flight).
       if (this.mode === 'play' && !k.power && this.hud.power) this.hud.power(null, P.perfectRun(this.history));
@@ -494,12 +498,33 @@
         trail = k.sim.path.slice(start * 2, end * 2);
       }
 
+      // Split Shot: the second ball after the split.
+      let ball2 = null;
+      let trail2 = null;
+      if (inAir && k.sim && k.sim.splitPath && k.pathPos >= k.sim.splitFrame) {
+        const sp = k.sim.splitPath;
+        const n2 = sp.length / 2;
+        const i = Math.min(n2, Math.floor(k.pathPos));
+        ball2 = { x: sp[(i - 1) * 2], y: sp[(i - 1) * 2 + 1] };
+        const s0 = Math.max(k.sim.splitFrame - 1, i - 70);
+        trail2 = sp.slice(s0 * 2, i * 2);
+      }
+      // Jack-o'-Ball: when it comes to rest it breaks apart and ghosts float out.
+      const jack = this.cfg && this.cfg.equipped && this.cfg.equipped.ball === 'jackoball' && !k.power;
+      if (jack && k.phase === 'result' && !k.jackBroke && k.sim && !k.sim.whiff) {
+        k.jackBroke = true;
+        this.r.burst('ghost', ball.x, 0.3, 3);
+        this.r.burst('pumpkin', ball.x, 0.1, 12);
+      }
+
       r.draw({
         camX: this.camX,
         scale: this.scale,
         anchor: this.anchor,
         time: this.time,
-        ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true },
+        ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true, broken: !!k.jackBroke },
+        ball2,
+        trail2,
         jason: this.jasonPose(ball),
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
         golden: k.golden && this.mode === 'play',
@@ -519,6 +544,7 @@
           total: this.total || 0,
           wind: k.wind,
           ballX: inAir ? ball.x : 0,
+          ball2X: ball2 ? ball2.x : k.sim && k.sim.split && k.phase !== 'flight' && inAir ? k.sim.split.distance : null,
           height: inAir ? ball.y : 0,
           fast: this.fast,
         });

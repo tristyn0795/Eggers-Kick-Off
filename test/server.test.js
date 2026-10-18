@@ -407,3 +407,42 @@ test('Power Balls are earned and simulated by the server', async () => {
   assert.strictEqual(round.body.kicks[5].pw, powered.power, 'replays know the power');
   assert.strictEqual(round.body.kicks[6].pw, undefined);
 });
+
+test('9 PERFECTs in a row break out the Piñata, and the server pays its prize', async () => {
+  const created = await fetch(BASE + '/api/player', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.9.9.10' }, body: JSON.stringify({ name: 'Pinata Pat' }),
+  });
+  const { token } = await created.json();
+  const st = (await api('/api/round/start', {}, token)).body;
+  const history = [];
+  let last;
+  for (let i = 0; i < 10; i++) {
+    const seed = P.kickSeed(st.baseSeed, i);
+    const power = P.powerBallFor(seed, history);
+    let frame = 0;
+    for (let f = 0; f < 600; f++) {
+      if (P.isPerfect(P.simulateKick(seed, f, st.upgrades, { power }))) { frame = f; break; }
+    }
+    const local = P.simulateKick(seed, frame, st.upgrades, { power });
+    last = await api('/api/round/kick', { roundId: st.roundId, index: i, frame }, token);
+    assert.strictEqual(last.status, 200);
+    assert.strictEqual(last.body.result.distance, local.distance, `kick ${i} agrees`);
+    assert.strictEqual(last.body.points, P.scoreKick(local, i, 10), `kick ${i} points agree`);
+    history.push({ perfect: P.isPerfect(local) });
+    if (i === 9) {
+      assert.strictEqual(power, 'pinata');
+      assert.strictEqual(last.body.result.power, 'pinata');
+      assert.ok(['coins', 'upgrade', 'boost', 'item'].includes(last.body.pinata.type));
+      assert.ok(last.body.milestones.some((m) => m.id === 'pinata'));
+    } else {
+      assert.strictEqual(last.body.pinata, null);
+    }
+  }
+  // A boost prize applies to the next round's upgrades.
+  if (last.body.pinata.type === 'boost') {
+    const z = last.body.pinata;
+    const next = (await api('/api/round/start', {}, token)).body;
+    assert.strictEqual(next.upgrades[z.id], Math.min(50, (st.upgrades[z.id] | 0) + z.levels));
+    assert.strictEqual(next.boost.roundsLeft, z.rounds - 1);
+  }
+});

@@ -24,7 +24,7 @@
   const KICKS_PER_ROUND = 10;
   // Bump whenever kick physics, scoring or targets change. Store-installed apps carry their own
   // copy of this file; an app with an older RULES_VERSION is asked to update before playing online.
-  const RULES_VERSION = 2;
+  const RULES_VERSION = 3;
   const FIELD_LENGTH = 160000;
 
   // Topgolf-style targets on the field. Points are awarded for where the ball
@@ -226,6 +226,8 @@
   function scoreKick(result, index, kicksPerRound) {
     const n = kicksPerRound || KICKS_PER_ROUND;
     let pts = Math.round(result.distance / 10) + (result.target ? result.target.points : 0);
+    // Split Shot: the second ball scores where it lands too.
+    if (result.split) pts += Math.round(result.split.distance / 10) + (result.split.target ? result.split.target.points : 0);
     if (index === n - 1) pts *= 2;
     return pts;
   }
@@ -234,34 +236,50 @@
    * Simulate a whole kick. `kickFrame` is the juggle frame on which the player
    * pressed kick. With opts.record the full ball path is returned for playback.
    */
-  // ---- Power Balls: land POWER_STREAK PERFECT kicks in a row and the next ball is special ----
+  // ---- Power Balls: every 5 PERFECT kicks in a row load a random Power Ball for the next kick;
+  // every 9 in a row load the Piñata instead. ----
   const POWER_STREAK = 5;
+  const PINATA_STREAK = 9;
   const POWER_BALLS = {
     fire: { id: 'fire', name: 'Fireball', short: 'FIRE', icon: '🔥', desc: 'Rockets 35% further.' },
     bouncy: { id: 'bouncy', name: 'Super Bouncy Ball', short: 'BOUNCY', icon: '🏀', desc: 'Huge bounces that carry it 25% further.' },
     meteor: { id: 'meteor', name: 'Meteor', short: 'METEOR', icon: '☄️', desc: 'One giant arc 45% further, then it craters: no bounce, no roll.' },
     magnet: { id: 'magnet', name: 'Magnet Ball', short: 'MAGNET', icon: '🧲', desc: 'If it stops near a target, it gets pulled into the bullseye.' },
+    split: { id: 'split', name: 'Split Shot', short: 'SPLIT', icon: '✂️', desc: 'Splits in two at the top of its flight. Both balls score where they land.' },
+    pinata: { id: 'pinata', name: 'Piñata Ball', short: 'PIÑATA', icon: '🪅', desc: 'Flies your full distance, cracks open where it lands and drops a prize!' },
   };
-  const POWER_IDS = ['fire', 'bouncy', 'meteor', 'magnet'];
+  // The random pool for 5-in-a-row (the Piñata is only for 9-in-a-row).
+  const POWER_IDS = ['fire', 'bouncy', 'meteor', 'magnet', 'split'];
 
   function isPerfect(result) {
     return !!result && !result.whiff && result.quality >= 0.95;
   }
 
-  /**
-   * The Power Ball for the next kick, or null. `history` is this round's earlier kicks in order,
-   * each { perfect: bool, power: id|null }. A power kick resets the run, so you earn each one.
-   * Which ball you get is fixed by the ball's seed, so client and server always agree.
-   */
+  /** PERFECT kicks in a row at the end of `history` (each entry { perfect }). */
   function perfectRun(history) {
     let run = 0;
-    for (const h of history || []) run = h && h.power ? 0 : h && h.perfect ? run + 1 : 0;
+    for (const h of history || []) run = h && h.perfect ? run + 1 : 0;
     return run;
   }
 
+  /** The next streak count that loads something: 5, 9, 10, 15, 18, 20… */
+  function nextPowerAt(run) {
+    let n = run + 1;
+    while (n % POWER_STREAK && n % PINATA_STREAK) n++;
+    return n;
+  }
+
+  /**
+   * The Power Ball for the next kick, or null. `history` is this round's earlier kicks in order,
+   * each { perfect: bool }. Which random ball you get is fixed by the ball's seed, so client and
+   * server always agree.
+   */
   function powerBallFor(seed, history) {
-    if (perfectRun(history) < POWER_STREAK) return null;
-    return POWER_IDS[hashSeed(seed >>> 0, 0x9B0B) % POWER_IDS.length];
+    const run = perfectRun(history);
+    if (!run) return null;
+    if (run % PINATA_STREAK === 0) return 'pinata';
+    if (run % POWER_STREAK === 0) return POWER_IDS[hashSeed(seed >>> 0, 0x9B0B) % POWER_IDS.length];
+    return null;
   }
 
   const MAGNET_SLIDE = 40;
@@ -279,11 +297,14 @@
   function simulateKick(seed, kickFrame, upgrades, opts) {
     opts = opts || {};
     const power = POWER_BALLS[opts.power] ? opts.power : null;
-    if (power !== 'fire' && power !== 'bouncy' && power !== 'meteor') return simulateCore(seed, kickFrame, upgrades, opts, power);
+    if (!power || power === 'magnet') return simulateCore(seed, kickFrame, upgrades, opts, power);
     const base = simulateCore(seed, kickFrame, upgrades, opts, null);
     base.power = power;
-    if (base.whiff || base.distance <= BALL_X) return base;
-    return power === 'meteor' ? meteorize(base) : stretchKick(base, power);
+    if (base.whiff || base.distance <= BALL_X + 1) return base;
+    if (power === 'meteor') return arcTo(base, 1.45, 'crater');
+    if (power === 'pinata') return arcTo(base, 1, 'pinata');
+    if (power === 'split') return splitKick(base);
+    return stretchKick(base, power);
   }
 
   // Fireball: the same kick, 35% further (it just goes faster). Super Bouncy: 25% further with much taller bounces.
@@ -316,10 +337,11 @@
   }
 
   // Meteor: one huge arc to 45% past where the kick would have ended, then a crater. No bounce, no roll.
-  function meteorize(r) {
+  // Piñata: the same arc to exactly where the kick would have ended, where it cracks open.
+  function arcTo(r, factor, eventType) {
     const startX = BALL_X;
     const startY = r.contactHeight;
-    const endX = BALL_X + (r.distance - BALL_X) * 1.45;
+    const endX = BALL_X + (r.distance - BALL_X) * factor;
     const span = endX - startX;
     const apex = Math.min(span * 0.06, 1800) + startY;
     const frames = Math.max(120, Math.min(5400, Math.round(span / 12)));
@@ -330,17 +352,57 @@
         path.push(startX + span * t, Math.max(0, startY * (1 - t) + 4 * (apex - startY / 2) * t * (1 - t)));
       }
       r.path = path;
-      r.events = [{ f: frames, type: 'crater', x: endX }];
+      r.events = [{ f: frames, type: eventType, x: endX }];
     }
     r.bounces = 0;
     r.padsHit = 0;
     r.puddlesHit = 0;
-    r.launchSpeed *= 1.45;
+    r.launchSpeed *= factor;
     r.flightFrames = frames;
     r.distance = Math.floor(endX * 10) / 10;
     r.firstBounce = Math.floor(endX);
     r.maxHeight = Math.floor(apex);
     r.target = targetFor(r.distance);
+    return r;
+  }
+
+  // Split Shot: shares the first 75% of the climb, splits at the top of the flight, then one ball
+  // carries on (ending near 80% of the kick) and a smaller one drops short (near 50%).
+  const SPLIT = { before: 0.85, main: 0.92, second: 0.55, secondY: 0.7 };
+  function splitKick(r) {
+    // Split at the top of the first flight (recorded by the simulation, so server and client agree).
+    const path = r.path || null;
+    const D = r.distance;
+    const apexX = Math.min(r.apexX, D);
+    const apexI = (r.apexFrame - 1) * 2;
+    const sx = BALL_X + (apexX - BALL_X) * SPLIT.before;
+    const mainAt = (x) => (x <= apexX ? BALL_X + (x - BALL_X) * SPLIT.before : sx + (x - apexX) * SPLIT.main);
+    const secondAt = (x) => (x <= apexX ? BALL_X + (x - BALL_X) * SPLIT.before : sx + (x - apexX) * SPLIT.second);
+    const mainEnd = Math.floor(mainAt(D) * 10) / 10;
+    const secondEnd = Math.floor(secondAt(D) * 10) / 10;
+    if (path) {
+      const second = [];
+      for (let i = 0; i < path.length; i += 2) {
+        const x = path[i], y = path[i + 1];
+        const after = i > apexI;
+        second.push(secondAt(x), after ? y * SPLIT.secondY : y);
+        path[i] = mainAt(x);
+      }
+      r.splitPath = second;
+      r.splitFrame = apexI / 2 + 1;
+      for (const e of r.events) {
+        e.x = mainAt(e.x);
+        if (e.type === 'pad' || e.type === 'puddle') e.type = 'bounce';
+      }
+      r.events.push({ f: r.splitFrame, type: 'split', x: sx });
+      r.events.sort((a, b) => a.f - b.f);
+    }
+    r.padsHit = 0;
+    r.puddlesHit = 0;
+    r.firstBounce = Math.floor(mainAt(r.firstBounce));
+    r.distance = mainEnd;
+    r.target = targetFor(mainEnd);
+    r.split = { distance: secondEnd, target: targetFor(secondEnd) };
     return r;
   }
 
@@ -416,6 +478,7 @@
     let frames = 0;
     let firstBounce = 0;
     let maxH = y;
+    let apexX = BALL_X, apexF = 0;
 
     while (frames < MAX_FLIGHT_FRAMES) {
       frames++;
@@ -425,7 +488,10 @@
         if (!result.whiff && vx < 0) vx = 0;
         x += vx * DT;
         y += vy * DT;
-        if (y > maxH) maxH = y;
+        if (y > maxH) {
+          maxH = y;
+          if (!firstBounce) { apexX = x; apexF = frames; }
+        }
         if (y <= 0 && vy < 0) {
           y = 0;
           if (!firstBounce) firstBounce = x;
@@ -508,6 +574,8 @@
     result.firstBounce = result.whiff ? 0 : Math.floor(firstBounce);
     result.maxHeight = Math.floor(maxH);
     result.flightFrames = frames;
+    result.apexX = apexX;
+    result.apexFrame = apexF;
     result.target = result.whiff ? null : targetFor(distance);
     if (record) {
       result.path = path;
@@ -539,7 +607,7 @@
   }
 
   return {
-    RULES_VERSION, POWER_STREAK, POWER_BALLS, POWER_IDS, isPerfect, perfectRun, powerBallFor, magnetRange, DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
+    RULES_VERSION, POWER_STREAK, PINATA_STREAK, POWER_BALLS, POWER_IDS, isPerfect, perfectRun, nextPowerAt, powerBallFor, magnetRange, DT, G, playbackSpeed, playbackTicks, isGoldenBall, SWING_FRAMES, MAX_WAIT_FRAMES, JUGGLE_FLOOR, SWEET_SPOT, BALL_X,
     KICKS_PER_ROUND, TARGETS, RINGS, MAX_UPGRADE_LEVEL, FIELD_LENGTH,
     mulberry32, hashSeed, kickSeed, stats, windFor, fieldObjects,
     createJuggler, stepJuggler, ringRadii, targetFor, scoreKick, simulateKick,

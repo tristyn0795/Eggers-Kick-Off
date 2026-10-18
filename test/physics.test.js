@@ -250,18 +250,50 @@ test('landmark challenges match the player\'s range', () => {
   }
 });
 
-test('Power Balls: 5 PERFECT kicks in a row load one, and using it resets the count', () => {
-  const perfect = { perfect: true, power: null };
-  const miss = { perfect: false, power: null };
-  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, perfect, perfect]), null);
-  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, miss, perfect, perfect, perfect]), null);
-  const got = P.powerBallFor(123, [miss, perfect, perfect, perfect, perfect, perfect]);
-  assert.ok(P.POWER_IDS.includes(got));
-  assert.strictEqual(P.powerBallFor(123, [perfect, perfect, perfect, perfect, perfect, { perfect: true, power: got }]), null);
-  // Every type turns up across seeds.
+test('Power Balls: every 5 PERFECT kicks in a row load one; 9 in a row load the Piñata', () => {
+  const perfect = { perfect: true };
+  const miss = { perfect: false };
+  const run = (n) => Array(n).fill(perfect);
+  assert.strictEqual(P.powerBallFor(123, run(4)), null);
+  assert.strictEqual(P.powerBallFor(123, [...run(2), miss, ...run(3)]), null);
+  assert.ok(P.POWER_IDS.includes(P.powerBallFor(123, [miss, ...run(5)])));
+  for (const n of [6, 7, 8]) assert.strictEqual(P.powerBallFor(123, run(n)), null);
+  assert.strictEqual(P.powerBallFor(123, run(9)), 'pinata');
+  assert.ok(P.POWER_IDS.includes(P.powerBallFor(123, run(10))));
+  assert.strictEqual(P.powerBallFor(123, run(18)), 'pinata');
+  assert.strictEqual(P.powerBallFor(123, run(45)), 'pinata', 'the piñata wins a tie');
+  assert.deepStrictEqual([0, 4, 5, 8, 9, 14, 17].map(P.nextPowerAt), [5, 5, 9, 9, 10, 15, 18]);
+  // Every random type turns up across seeds, and never the piñata.
   const seen = new Set();
-  for (let s = 0; s < 200; s++) seen.add(P.powerBallFor(s, Array(5).fill(perfect)));
+  for (let s = 0; s < 300; s++) seen.add(P.powerBallFor(s, run(5)));
   assert.deepStrictEqual([...seen].sort(), [...P.POWER_IDS].sort());
+});
+
+test('Split Shot and Piñata: deterministic, and the drawn path matches the result', () => {
+  for (const L of [0, 10, 50]) {
+    const up = { boots: L, ball: L, training: L, focus: L, aero: L, luck: L };
+    for (let s = 1; s <= 12; s++) {
+      const seed = P.kickSeed(s * 97, 4);
+      let frame = 0, best = -1;
+      for (let f = 0; f < 240; f++) {
+        const d = P.simulateKick(seed, f, up).distance;
+        if (d > best) { best = d; frame = f; }
+      }
+      const base = P.simulateKick(seed, frame, up);
+      const split = P.simulateKick(seed, frame, up, { power: 'split' });
+      const splitRec = P.simulateKick(seed, frame, up, { power: 'split', record: true });
+      assert.strictEqual(split.distance, splitRec.distance, 'server and client agree on the main ball');
+      assert.strictEqual(split.split.distance, splitRec.split.distance, 'and on the second ball');
+      assert.ok(split.distance < base.distance && split.split.distance < split.distance, 'split balls fly shorter');
+      assert.ok(Math.abs(splitRec.path[splitRec.path.length - 2] - splitRec.distance) < 0.2);
+      assert.ok(Math.abs(splitRec.splitPath[splitRec.splitPath.length - 2] - splitRec.split.distance) < 0.2);
+      assert.ok(P.scoreKick(split, 4, 10) > Math.round(split.distance / 10), 'both balls score');
+      const pinata = P.simulateKick(seed, frame, up, { power: 'pinata', record: true });
+      assert.strictEqual(pinata.distance, base.distance, 'the piñata flies your full distance');
+      assert.strictEqual(pinata.bounces, 0);
+      assert.strictEqual(pinata.events[0].type, 'pinata');
+    }
+  }
 });
 
 test('Power Balls change the kick as advertised, at every level', () => {
@@ -305,4 +337,49 @@ test('Magnet Ball pulls a nearby stop into the bullseye', () => {
     assert.ok(Math.abs(mag.path[mag.path.length - 2] - mag.distance) < 0.2);
   }
   assert.ok(pulled >= 3, 'found magnet pulls');
+});
+
+test('Piñata prizes are fixed by the key and always pay something', () => {
+  const C = require('../shared/catalog');
+  const base = Object.assign(C.newProfile(), { xp: 30000, coins: 0, upgrades: { boots: 3 } });
+  const kinds = new Set();
+  for (let i = 0; i < 300; i++) {
+    const a = JSON.parse(JSON.stringify(base));
+    const b = JSON.parse(JSON.stringify(base));
+    const za = C.openPinata(a, `round${i}:9`, Date.UTC(2026, 9, 20));
+    const zb = C.openPinata(b, `round${i}:9`, Date.UTC(2026, 9, 20));
+    assert.deepStrictEqual(za, zb, 'same key, same prize');
+    kinds.add(za.type);
+    if (za.type === 'coins') assert.ok(a.coins > 0);
+    if (za.type === 'upgrade') assert.strictEqual(a.upgrades[za.id], (base.upgrades[za.id] | 0) + 1);
+    if (za.type === 'boost') assert.deepStrictEqual(a.boost, { id: za.id, levels: C.BOOST_LEVELS, rounds: C.BOOST_ROUNDS });
+    if (za.type === 'item') {
+      assert.ok(a.owned.includes(`${za.slot}:${za.id}`));
+      const it = C.SLOTS[za.slot].find((x) => x.id === za.id);
+      assert.ok(it.level <= C.levelFromXp(base.xp) + 10, 'no wildly out-of-reach items');
+    }
+  }
+  assert.deepStrictEqual([...kinds].sort(), ['boost', 'coins', 'item', 'upgrade']);
+});
+
+test('Piñata boost adds levels for a couple of rounds, then runs out', () => {
+  const C = require('../shared/catalog');
+  const p = { boost: { id: 'boots', levels: 5, rounds: 2 } };
+  assert.deepStrictEqual(C.useBoost(p, { boots: 3 }).upgrades, { boots: 8 });
+  assert.deepStrictEqual(C.useBoost(p, { boots: 48 }).upgrades, { boots: 50 }, 'capped at 50');
+  assert.strictEqual(p.boost, null);
+  assert.deepStrictEqual(C.useBoost(p, { boots: 3 }), { upgrades: { boots: 3 }, boost: null });
+});
+
+test('Spooky Season items are only for sale in season, and stay yours after', () => {
+  const C = require('../shared/catalog');
+  assert.ok(C.seasonActive('halloween', Date.UTC(2026, 9, 1)));
+  assert.ok(C.seasonActive('halloween', Date.UTC(2026, 10, 7)));
+  assert.ok(!C.seasonActive('halloween', Date.UTC(2026, 10, 8)));
+  assert.ok(!C.seasonActive('halloween', Date.UTC(2027, 8, 30)));
+  const spooky = [...C.OUTFITS, ...C.BALLS, ...C.TRAILS].filter((i) => i.season === 'halloween').map((i) => i.id).sort();
+  assert.deepStrictEqual(spooky, ['bats', 'ghosts', 'jackoball', 'pumpkintee', 'skeleton', 'vampire']);
+  const p = Object.assign(C.newProfile(), { owned: [...C.DEFAULT_OWNED, 'ball:jackoball'] });
+  assert.ok(C.isOwned(p, 'ball', 'jackoball'));
+  assert.strictEqual(C.applyEquip(p, 'ball', 'jackoball'), null);
 });

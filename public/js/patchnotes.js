@@ -1,6 +1,45 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.8.0',
+    date: '18 Oct 2026',
+    title: 'Piñatas, Split Shots & Spooky Season 🪅🎃',
+    sections: [
+      {
+        heading: '🪅 New: the Piñata Ball (thanks John!)',
+        items: [
+          'Land 9 PERFECT kicks in a row and your next ball is a Piñata. In a 10-kick round, that means a perfect round ends with one.',
+          'It flies your full distance, so high-score chasers lose nothing, then cracks open where it lands and drops a prize.',
+          'Prizes: a pile of coins, a free upgrade level, a ⚡ +5 boost to one upgrade for your next 2 rounds, or a new outfit, ball or trail.',
+          'The PERFECT counter now shows your next goal: 5 for a Power Ball, 9 for the 🪅 Piñata. Power Balls no longer reset the count, so you can chase both.',
+        ],
+      },
+      {
+        heading: '✂️ New Power Ball: Split Shot',
+        items: [
+          'Splits in two at the top of its flight. Each ball goes a bit shorter, but both score where they land, with two chances at a target.',
+          'Keep an eye on the ✂️ marker on the progress bar to see where the second ball ends up.',
+        ],
+      },
+      {
+        heading: '🎃 Spooky Season (limited time, until 7 Nov)',
+        items: [
+          "Jack-o'-Ball: a glowing carved pumpkin that breaks apart when it stops, and lets the ghosts out. 👻",
+          'Outfits: Pumpkin Patch Tee, Skele-Jason and Count Jasonula (cape included). 🧛',
+          'Trails: Bat Swarm 🦇 and Ghost Trail 👻.',
+          'Limited edition: buy it during Spooky Season and it is yours to keep forever.',
+        ],
+      },
+      {
+        heading: '🏆 Flex your gear',
+        items: [
+          "The leaderboard now shows each kicker's outfit, ball and trail, so everyone can see your swag (replays already show it in action).",
+          'New milestone: Fiesta! (smash a Piñata).',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.7.0',
     date: '17 Oct 2026',
     title: 'Power Balls! 🔥🏀☄️🧲',

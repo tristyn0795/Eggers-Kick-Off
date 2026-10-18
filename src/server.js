@@ -47,7 +47,7 @@ function signBackup(p) {
   const data = {
     v: 1, id: p.id, name: p.name, coins: p.coins, xp: p.xp, upgrades: p.upgrades, owned: p.owned,
     equipped: p.equipped, bestRound: p.bestRound, bestKick: p.bestKick, roundsPlayed: p.roundsPlayed,
-    milestones: p.milestones || [], career: p.career || {}, daily: p.daily || {}, prestige: p.prestige | 0, t: Date.now(),
+    milestones: p.milestones || [], career: p.career || {}, daily: p.daily || {}, prestige: p.prestige | 0, boost: p.boost || null, t: Date.now(),
   };
   const body = Buffer.from(JSON.stringify(data)).toString('base64url');
   const sig = crypto.createHmac('sha256', BACKUP_SECRET).update(body).digest('base64url');
@@ -99,6 +99,7 @@ function publicPlayer(p) {
     prestige: p.prestige | 0,
     challenges: p.challenges || {},
     banned: !!p.banned,
+    boost: p.boost || null,
     backup: signBackup(p),
   };
 }
@@ -241,7 +242,7 @@ async function main() {
       coins: data.coins | 0, xp: data.xp | 0, upgrades: data.upgrades || {}, owned: data.owned || base.owned,
       equipped: data.equipped || base.equipped, bestRound: data.bestRound | 0, bestKick: Number(data.bestKick) || 0,
       roundsPlayed: data.roundsPlayed | 0, milestones: data.milestones || [], career: data.career || {}, daily: data.daily || {},
-      prestige: data.prestige | 0,
+      prestige: data.prestige | 0, boost: data.boost || null,
     });
     await store.savePlayer(p);
     console.log(`Restored profile ${p.id} (${p.name}) from a device backup`);
@@ -406,12 +407,26 @@ async function main() {
       if (!ch || !ch.finished) throw new HttpError(404, 'That challenge no longer exists');
       seed = ch.baseSeed;
     }
+    // Snapshot the kicker's gear for this round; prestige adds permanent power in the physics.
+    let upgrades = fair ? {} : Object.assign({}, player.upgrades, player.prestige ? { prestige: player.prestige | 0 } : {});
+    let boost = null;
+    if (!fair && !career && player.boost && player.boost.rounds > 0) {
+      // A Piñata boost: +5 levels on one upgrade for the next couple of rounds (not Career).
+      await withLock('p:' + player.id, async () => {
+        const fresh = await store.getPlayer(player.id);
+        const used = C.useBoost(fresh, upgrades);
+        if (used.boost) {
+          upgrades = used.upgrades;
+          boost = used.boost;
+          await store.savePlayer(fresh);
+        }
+      });
+    }
     const round = {
       id: newId(),
       playerId: player.id,
       baseSeed: seed == null ? newSeed() : seed,
-      // Snapshot the kicker's gear for this round; prestige adds permanent power in the physics.
-      upgrades: fair ? {} : Object.assign({}, player.upgrades, player.prestige ? { prestige: player.prestige | 0 } : {}),
+      upgrades,
       kicks: [],
       score: 0,
       finished: false,
@@ -420,13 +435,14 @@ async function main() {
       career: career || null,
     };
     await store.createRound(round);
+    round.boost = boost;
     return round;
   }
 
   app.post('/api/round/start', auth, rateLimit({ windowMs: 60e3, max: 30 }), wrap(async (req) => {
     const body = req.body || {};
     const round = await startRound(req.player, { challengeOf: body.challengeOf, career: body.career ? String(body.career) : null });
-    return { roundId: round.id, baseSeed: round.baseSeed, upgrades: round.upgrades, kicks: KICKS, career: round.career };
+    return { roundId: round.id, baseSeed: round.baseSeed, upgrades: round.upgrades, kicks: KICKS, career: round.career, boost: round.boost };
   }));
 
   app.post('/api/round/kick', auth, wrap(async (req) => {
@@ -446,7 +462,7 @@ async function main() {
 
       // 5 PERFECT kicks in a row earn a Power Ball on the next one.
       const seed = P.kickSeed(round.baseSeed, index);
-      const power = P.powerBallFor(seed, round.kicks.map((k) => ({ perfect: !!k.q, power: k.pw || null })));
+      const power = P.powerBallFor(seed, round.kicks.map((k) => ({ perfect: !!k.q })));
       const result = P.simulateKick(seed, frame, round.upgrades, { power });
       const points = P.scoreKick(result, index, KICKS);
       const kick = { f: frame, d: result.distance, p: points, t: result.target ? result.target.name : null, q: P.isPerfect(result) ? 1 : 0 };
@@ -474,6 +490,9 @@ async function main() {
         const award = C.awardKick(player, points, { streak, golden });
         entry.c = award.coins;
         entry.lb = award.levelBonus;
+        // Piñata: break it open (prize fixed by round + kick).
+        const pinata = power === 'pinata' ? C.openPinata(player, `${round.id}:${index}`, Date.now()) : null;
+        if (pinata) entry.pz = pinata.type;
         const milestones = C.checkMilestones(player, { kick: result });
         const challenges = CH.progress(player, { kick: result });
         if (done) {
@@ -530,11 +549,11 @@ async function main() {
         }
         await store.saveRound(round);
         await store.savePlayer(player);
-        return { round, player, result, points, done, summary, newBestKick, milestones, award, challenges };
+        return { round, player, result, points, done, summary, newBestKick, milestones, award, challenges, pinata };
       });
     });
 
-    const { round, player, result, points, done, summary, newBestKick, milestones, award, challenges } = out;
+    const { round, player, result, points, done, summary, newBestKick, milestones, award, challenges, pinata } = out;
     // Hold the news back until the kick has finished playing on the kicker's screen,
     // so nobody (the kicker included) sees a result while the ball is still flying.
     const ticks = P.playbackTicks(result.flightFrames);
@@ -547,7 +566,7 @@ async function main() {
     }, revealMs);
 
     return {
-      index, points, total: round.score, done, summary, newBestKick, milestones, challenges,
+      index, points, total: round.score, done, summary, newBestKick, milestones, challenges, pinata,
       earned: {
         coins: award.coins, levelBonus: award.levelBonus, levelAfter: award.levelAfter, levelBefore: award.levelBefore,
         combo: award.combo, streak: award.streak, golden: award.golden, veteran: award.veteran,
@@ -555,6 +574,7 @@ async function main() {
       result: {
         distance: result.distance, firstBounce: result.firstBounce, label: result.label,
         quality: result.quality, target: result.target, whiff: result.whiff, power: result.power || null,
+        split: result.split || null,
       },
       player: publicPlayer(player),
     };
@@ -574,7 +594,7 @@ async function main() {
   app.get('/api/leaderboard', wrap(async (req) => {
     const type = ['round', 'kick', 'week'].includes(req.query.type) ? req.query.type : 'round';
     const rows = await store.leaderboard(type, 50);
-    return { type, rows: rows.map((r) => Object.assign(r, { level: C.levelFromXp(r.xp || 0) })) };
+    return { type, rows: rows.map((r) => Object.assign(r, { level: C.levelFromXp(r.xp || 0), equipped: Object.assign({}, C.DEFAULT_EQUIPPED, r.equipped) })) };
   }));
 
   app.get('/api/stats', wrap(async () => Object.assign(await store.stats(), { online: sockets.size })));

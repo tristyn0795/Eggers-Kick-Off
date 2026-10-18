@@ -97,9 +97,25 @@
         confetti: ['#047dc3', '#4caf50', '#ffd600', '#e53935', '#ffffff', '#ab47bc'],
         kick: ['#ffffff', '#fff59d'],
         fire: ['#ff9800', '#ff5722', '#ffd54f', '#fff3e0'],
+        candy: ['#ff4081', '#ffeb3b', '#00e5ff', '#76ff03', '#ff9100', '#e040fb'],
+        pumpkin: ['#ef6c00', '#ff8f00', '#e65100', '#4e342e'],
+        ghost: ['#ffffff'],
         crater: ['#6d4c41', '#8d6e63', '#ff7043', '#ffab40', '#3e2723'],
         magnet: ['#7c4dff', '#40c4ff', '#ffffff', '#e040fb'],
       }[type] || ['#fff'];
+      if (type === 'ghost') {
+        // Little ghosts that drift up out of a Jack-o'-Ball.
+        // Spread and speed are set in screen pixels so they read at any zoom.
+        const px = 1 / Math.max(0.2, this.scale || 1);
+        for (let i = 0; i < n; i++) {
+          const o = i - (n - 1) / 2;
+          this.particles.push({
+            type, x: x + o * 16 * px, y: y + 8 * px * i, vx: o * 14 * px, vy: (34 + i * 8) * px,
+            life: 1, decay: 0.0045, color: '#ffffff', size: 20 + (i % 2) * 4, screen: false, phase: i * 2.1, px,
+          });
+        }
+        return;
+      }
       for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI;
         const sp = (type === 'confetti' ? 6 : 3) * (0.4 + Math.random());
@@ -117,7 +133,14 @@
 
     updateParticles(dt) {
       for (const p of this.particles) {
-        p.vy -= 9.8 * dt * (p.type === 'confetti' ? 0.3 : 0.8);
+        if (p.type === 'ghost') {
+          p.phase += dt * 4;
+          p.x += (p.vx + Math.sin(p.phase) * 12 * (p.px || 0.05)) * dt;
+          p.y += p.vy * dt;
+          p.life -= p.decay;
+          continue;
+        }
+        p.vy -= 9.8 * dt * (p.type === 'confetti' || p.type === 'candy' ? 0.3 : 0.8);
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         if (p.y < 0) { p.y = 0; p.vy *= -0.3; p.vx *= 0.7; }
@@ -153,8 +176,10 @@
       if (st.trail && st.power) this.drawPowerTrail(st.trail, st.power, st.time);
       else if (st.trail) this.drawTrail(st.trail, st.time);
       if (st.ball && st.ball.visible && st.golden) this.drawGoldenGlow(st.ball.x, st.ball.y, st.time);
+      if (st.trail2) this.drawPowerTrail(st.trail2, 'split', st.time);
+      if (st.ball2) this.drawPowerBall(st.ball2.x, st.ball2.y, -(st.ball ? st.ball.rot : 0), st.time, 'split', 0.8);
       if (st.ball && st.ball.visible && st.power) this.drawPowerBall(st.ball.x, st.ball.y, st.ball.rot, st.time, st.power);
-      else if (st.ball && st.ball.visible) this.drawBall(st.ball.x, st.ball.y, st.ball.rot, st.time);
+      else if (st.ball && st.ball.visible) this.drawBall(st.ball.x, st.ball.y, st.ball.rot, st.time, st.ball.broken);
       this.drawParticles();
     }
 
@@ -1242,6 +1267,17 @@
           ctx.strokeStyle = cloth(shade);
           ctx.lineWidth = 0.19 * s;
           ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(kx, ky); ctx.lineTo(kx + (fx - kx) * 0.8, ky + (fy - ky) * 0.8); ctx.stroke();
+          if (outfit.bones) {
+            // Skeleton print: thigh and shin bones with knobbly knees.
+            ctx.strokeStyle = shade ? '#bdbdb5' : outfit.alt;
+            ctx.lineWidth = 0.045 * s;
+            ctx.beginPath();
+            ctx.moveTo(hx + (kx - hx) * 0.12, hy + (ky - hy) * 0.12); ctx.lineTo(hx + (kx - hx) * 0.85, hy + (ky - hy) * 0.85);
+            ctx.moveTo(kx + (fx - kx) * 0.15, ky + (fy - ky) * 0.15); ctx.lineTo(kx + (fx - kx) * 0.72, ky + (fy - ky) * 0.72);
+            ctx.stroke();
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.beginPath(); ctx.arc(kx, ky, 0.04 * s, 0, Math.PI * 2); ctx.fill();
+          }
         } else {
           ctx.strokeStyle = shade ? SKIN_DARK : SKIN;
           ctx.lineWidth = 0.14 * s;
@@ -1277,6 +1313,14 @@
         if (long) { ctx.lineTo(ex, ey); ctx.lineTo(ex + (hx - ex) * 0.72, ey + (hy - ey) * 0.72); }
         else ctx.lineTo(sx0 + (ex - sx0) * 0.5, sy0 + (ey - sy0) * 0.5);
         ctx.stroke();
+        if (outfit.bones && long) {
+          ctx.strokeStyle = shade ? '#bdbdb5' : outfit.alt;
+          ctx.lineWidth = 0.035 * s;
+          ctx.beginPath();
+          ctx.moveTo(sx0 + (ex - sx0) * 0.15, sy0 + (ey - sy0) * 0.15); ctx.lineTo(sx0 + (ex - sx0) * 0.85, sy0 + (ey - sy0) * 0.85);
+          ctx.moveTo(ex + (hx - ex) * 0.12, ey + (hy - ey) * 0.12); ctx.lineTo(ex + (hx - ex) * 0.62, ey + (hy - ey) * 0.62);
+          ctx.stroke();
+        }
       };
 
       // Shadow
@@ -1287,6 +1331,25 @@
 
       const lean = j.lean || 0;
       const shoulder = { x: Math.sin(lean) * 0.5, y: HIP_Y + Math.cos(lean) * 0.5 };
+
+      if (outfit.cape) {
+        // Vampire cape: hangs from the shoulders and flows out behind Jason.
+        const sway = Math.sin(this.time * 2.2) * 0.05 + (j.lean || 0) * 0.3;
+        const [ax, ay] = P0(shoulder.x - 0.2, shoulder.y + 0.02);
+        const [bx, by] = P0(shoulder.x + 0.12, shoulder.y + 0.02);
+        const [cx, cy] = P0(-0.55 - sway, 0.32);
+        const [dx, dy] = P0(-0.05, 0.28);
+        const [mx, my] = P0(-0.42 - sway, 0.95);
+        ctx.fillStyle = '#0d0d0d';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay); ctx.quadraticCurveTo(mx, my, cx, cy); ctx.lineTo(dx, dy); ctx.lineTo(bx, by); ctx.closePath();
+        ctx.fill();
+        const [ix, iy] = P0(-0.32 - sway, 0.4);
+        ctx.fillStyle = outfit.cape;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay); ctx.quadraticCurveTo(mx + 0.06 * s, my + 0.05 * s, cx + 0.05 * s, cy - 0.02 * s); ctx.lineTo(ix, iy); ctx.closePath();
+        ctx.fill();
+      }
 
       // Back arm, then both legs: the torso is drawn over the hip joints so they never poke through.
       drawArm({ x: shoulder.x - 0.05, y: shoulder.y }, j.backArm, 0.5, true);
@@ -1335,6 +1398,17 @@
         ctx.arc(0, 0, hr, 0, Math.PI * 2);
         ctx.ellipse(0.03 * s, 0.06 * s, hr * 0.85, hr * 0.7, 0, 0, Math.PI * 2);
       };
+      if (outfit.cape) {
+        // Tall vampire collar behind the head.
+        ctx.fillStyle = '#0d0d0d';
+        ctx.beginPath();
+        ctx.moveTo(-0.2 * s, 0.22 * s); ctx.lineTo(-0.3 * s, -0.12 * s); ctx.lineTo(-0.06 * s, 0.12 * s); ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = outfit.cape;
+        ctx.beginPath();
+        ctx.moveTo(-0.18 * s, 0.2 * s); ctx.lineTo(-0.26 * s, -0.06 * s); ctx.lineTo(-0.09 * s, 0.13 * s); ctx.closePath();
+        ctx.fill();
+      }
       ctx.fillStyle = SKIN;
       headShape();
       ctx.fill();
@@ -1500,6 +1574,35 @@
       } else if (p === 'astro') {
         ctx.fillStyle = outfit.alt;
         ctx.fillRect(-0.06 * s, -0.5 * s, 0.14 * s, 0.1 * s);
+      } else if (p === 'pumpkin') {
+        // Jack-o'-lantern face on the chest
+        ctx.fillStyle = outfit.alt;
+        ctx.beginPath();
+        ctx.moveTo(-0.13 * s, -0.42 * s); ctx.lineTo(-0.06 * s, -0.54 * s); ctx.lineTo(0.0, -0.42 * s);
+        ctx.moveTo(0.06 * s, -0.42 * s); ctx.lineTo(0.13 * s, -0.54 * s); ctx.lineTo(0.19 * s, -0.42 * s);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-0.15 * s, -0.33 * s);
+        for (let i = 0; i <= 6; i++) ctx.lineTo((-0.15 + i * 0.055) * s, (i % 2 ? -0.29 : -0.33) * s);
+        ctx.quadraticCurveTo(0.03 * s, -0.12 * s, -0.15 * s, -0.33 * s);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = 0.02 * s;
+        for (const x of [-0.12, 0.12]) { ctx.beginPath(); ctx.moveTo(x * s, -0.66 * s); ctx.quadraticCurveTo(x * 1.4 * s, -0.35 * s, x * s, -0.05 * s); ctx.stroke(); }
+      } else if (p === 'skeleton') {
+        // Ribcage print: sternum, curved ribs and a pelvis hint
+        ctx.strokeStyle = outfit.alt;
+        ctx.fillStyle = outfit.alt;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 0.035 * s;
+        ctx.beginPath(); ctx.moveTo(0.03 * s, -0.62 * s); ctx.lineTo(0.03 * s, -0.3 * s); ctx.stroke();
+        ctx.lineWidth = 0.028 * s;
+        for (let i = 0; i < 4; i++) {
+          const y = (-0.58 + i * 0.085) * s;
+          const w = (0.16 - i * 0.012) * s;
+          ctx.beginPath(); ctx.moveTo(0.03 * s - w, y + 0.04 * s); ctx.quadraticCurveTo(0.03 * s, y - 0.04 * s, 0.03 * s + w, y + 0.04 * s); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(0.03 * s, -0.12 * s, 0.07 * s, Math.PI, 0); ctx.stroke();
       } else {
         // Click Wise cursor logo on the chest
         ctx.fillStyle = '#fff';
@@ -1538,9 +1641,10 @@
     }
 
     // ---- Ball + trail -----------------------------------------------------
-    drawBall(x, y, rot, time) {
+    drawBall(x, y, rot, time, broken) {
       const ctx = this.ctx;
       const ball = C.BALLS.find((b) => b.id === this.equipped.ball) || C.BALLS[0];
+      if (ball.style === 'jackoball') return this.drawJackoBall(x, y, rot, time, broken);
       const r = Math.max(0.11 * this.scale, 5);
       const X = this.sx(x), Y = this.sy(y) - r * 0.2;
       // shadow
@@ -1725,10 +1829,67 @@
       }
     }
 
-    /** Power Balls (5 PERFECT kicks in a row): each has its own look. */
-    drawPowerBall(x, y, rot, time, power) {
+    /** Jack-o'-Ball: a glowing carved pumpkin. When it comes to rest it splits in two. */
+    drawJackoBall(x, y, rot, time, broken) {
       const ctx = this.ctx;
-      const r = Math.max(0.11 * this.scale, 6.5); // a touch bigger than normal so it stands out zoomed out
+      const r = Math.max(0.12 * this.scale, broken ? 9 : 5.5);
+      const X = this.sx(x), Y = this.sy(y) - r * 0.2;
+      const flicker = 0.75 + 0.25 * Math.sin(time * 13) * Math.sin(time * 7.3);
+      const body = (cx, cy, angle, half) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        if (half) { ctx.beginPath(); ctx.rect(half < 0 ? -r * 1.2 : 0, -r * 1.3, r * 1.2, r * 2.6); ctx.clip(); }
+        ctx.fillStyle = '#ef6c00';
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.08, r * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#bf360c';
+        ctx.lineWidth = Math.max(1, r * 0.08);
+        for (const k of [-0.5, 0, 0.5]) { ctx.beginPath(); ctx.ellipse(k * r * 0.9, 0, r * 0.32, r * 0.92, 0, 0, Math.PI * 2); ctx.stroke(); }
+        // Carved face, lit from inside
+        ctx.fillStyle = `rgba(255,${Math.round(200 + 40 * flicker)},60,${0.85 + 0.15 * flicker})`;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.55, -r * 0.1); ctx.lineTo(-r * 0.3, -r * 0.45); ctx.lineTo(-r * 0.12, -r * 0.1);
+        ctx.moveTo(r * 0.12, -r * 0.1); ctx.lineTo(r * 0.3, -r * 0.45); ctx.lineTo(r * 0.55, -r * 0.1);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.62, r * 0.18);
+        for (let i = 0; i <= 6; i++) ctx.lineTo(-r * 0.62 + (i * r * 1.24) / 6, r * (i % 2 ? 0.3 : 0.18));
+        ctx.quadraticCurveTo(0, r * 0.75, -r * 0.62, r * 0.18);
+        ctx.fill();
+        ctx.restore();
+      };
+      // Shadow
+      const sh = Math.max(0.15, 1 - y / 30);
+      ctx.fillStyle = `rgba(0,0,0,${0.22 * sh})`;
+      ctx.beginPath(); ctx.ellipse(X, this.groundY + 2, r * sh * 1.2, r * 0.3 * sh, 0, 0, Math.PI * 2); ctx.fill();
+      if (broken) {
+        // Two halves fallen apart, with the stem lying between them.
+        const gy = this.groundY - r * 0.7;
+        body(X - r * 0.55, gy, -0.5, -1);
+        body(X + r * 0.55, gy, 0.5, 1);
+        ctx.fillStyle = '#4e342e';
+        ctx.fillRect(X - r * 0.12, this.groundY - r * 0.25, r * 0.4, r * 0.2);
+        return;
+      }
+      const g = ctx.createRadialGradient(X, Y, r * 0.5, X, Y, r * 2.2);
+      g.addColorStop(0, `rgba(255,171,64,${0.45 * flicker})`);
+      g.addColorStop(1, 'rgba(255,171,64,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(X, Y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+      body(X, Y, rot * 0.35, 0);
+      ctx.save();
+      ctx.translate(X, Y); ctx.rotate(rot * 0.35);
+      ctx.fillStyle = '#4e342e';
+      ctx.fillRect(-r * 0.1, -r * 1.25, r * 0.22, r * 0.38);
+      ctx.fillStyle = '#558b2f';
+      ctx.beginPath(); ctx.ellipse(r * 0.28, -r * 1.05, r * 0.25, r * 0.1, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    /** Power Balls (5 PERFECT kicks in a row): each has its own look. */
+    drawPowerBall(x, y, rot, time, power, size) {
+      const ctx = this.ctx;
+      const r = Math.max(0.11 * this.scale, 6.5) * (size || 1); // a touch bigger than normal so it stands out zoomed out
       const X = this.sx(x), Y = this.sy(y) - r * 0.2;
       const sh = Math.max(0.15, 1 - y / 30);
       ctx.fillStyle = `rgba(0,0,0,${0.22 * sh})`;
@@ -1787,6 +1948,47 @@
         ctx.beginPath(); ctx.arc(r * 0.3, -r * 0.2, r * 0.22, 0, Math.PI * 2); ctx.arc(-r * 0.35, r * 0.3, r * 0.16, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#3e2723';
         ctx.beginPath(); ctx.arc(-r * 0.25, -r * 0.4, r * 0.14, 0, Math.PI * 2); ctx.fill();
+      } else if (power === 'split') {
+        glow('rgba(0,229,255,0.45)', 'rgba(224,64,251,0)', 2.2);
+        ctx.translate(X, Y); ctx.rotate(rot);
+        ctx.fillStyle = '#00bcd4';
+        ctx.beginPath(); ctx.arc(0, 0, r, Math.PI / 2, -Math.PI / 2); ctx.fill();
+        ctx.fillStyle = '#d500f9';
+        ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2); ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1, r * 0.14);
+        ctx.beginPath();
+        for (let i = 0; i <= 6; i++) ctx.lineTo((i % 2 ? 0.18 : -0.18) * r, -r + (i * 2 * r) / 6);
+        ctx.stroke();
+      } else if (power === 'pinata') {
+        glow('rgba(255,64,129,0.4)', 'rgba(255,235,59,0)', 2.3);
+        ctx.translate(X, Y); ctx.rotate(rot * 0.25);
+        // Tassels from each point
+        const cols = ['#ff4081', '#ffeb3b', '#00e5ff', '#76ff03', '#ff9100'];
+        for (let i = 0; i < 5; i++) {
+          const a = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+          ctx.strokeStyle = cols[i];
+          ctx.lineWidth = Math.max(1, r * 0.12);
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * r * 1.25, Math.sin(a) * r * 1.25);
+          ctx.lineTo(Math.cos(a) * r * 1.8 + Math.sin(time * 9 + i) * r * 0.2, Math.sin(a) * r * 1.8 + r * 0.3);
+          ctx.stroke();
+        }
+        // Star body in stripes
+        ctx.save();
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const a = -Math.PI / 2 + (i * Math.PI) / 5;
+          const rr = i % 2 ? r * 0.6 : r * 1.3;
+          ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath();
+        ctx.clip();
+        for (let i = -3; i < 3; i++) {
+          ctx.fillStyle = cols[(i + 5) % 5];
+          ctx.fillRect(-r * 1.4, i * r * 0.45, r * 2.8, r * 0.46);
+        }
+        ctx.restore();
       } else if (power === 'magnet') {
         glow('rgba(124,77,255,0.5)', 'rgba(64,196,255,0)', 2.4);
         ctx.strokeStyle = 'rgba(64,196,255,0.8)';
@@ -1845,6 +2047,26 @@
         }
         ctx.stroke();
         ctx.setLineDash([]);
+      } else if (power === 'split') {
+        ctx.setLineDash([4, 5]);
+        ctx.strokeStyle = 'rgba(0,229,255,0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) {
+          const X = this.sx(trail[i * 2]), Y = this.sy(trail[i * 2 + 1]);
+          if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (power === 'pinata') {
+        const cols = ['#ff4081', '#ffeb3b', '#00e5ff', '#76ff03', '#ff9100'];
+        for (let i = 0; i < n; i += 2) {
+          const a = i / n;
+          ctx.globalAlpha = a;
+          ctx.fillStyle = cols[i % 5];
+          ctx.fillRect(this.sx(trail[i * 2]) + Math.sin(i * 7.7) * 6, this.sy(trail[i * 2 + 1]) + Math.cos(i * 3.1) * 6, 3 + a * 3, 2 + a * 2);
+        }
+        ctx.globalAlpha = 1;
       } else if (power === 'magnet') {
         for (let i = 0; i < n; i += 2) {
           const a = i / n;
@@ -1979,7 +2201,66 @@
           ctx.arc(this.sx(trail[i * 2]), this.sy(trail[i * 2 + 1]), 2 + a * 7, 0, Math.PI * 2);
           ctx.fill();
         }
+      } else if (type === 'bats') {
+        for (let i = 0; i < n; i += 7) {
+          const a = i / n;
+          ctx.fillStyle = `rgba(33,20,40,${0.25 + a * 0.75})`;
+          const X = this.sx(trail[i * 2]) + Math.sin(i * 1.7 + time * 3) * 10;
+          const Y = this.sy(trail[i * 2 + 1]) + Math.cos(i * 2.3 + time * 2) * 10;
+          this.drawBat(X, Y, 5 + a * 6, time * 18 + i);
+        }
+      } else if (type === 'ghosts') {
+        for (let i = 0; i < n; i += 10) {
+          const a = i / n;
+          const X = this.sx(trail[i * 2]) + Math.sin(i * 0.9 + time * 2) * 6;
+          const Y = this.sy(trail[i * 2 + 1]) - (1 - a) * 12;
+          this.drawGhost(X, Y, 8 + a * 8, time + i, 0.15 + a * 0.75);
+        }
       }
+    }
+
+    /** A little cartoon ghost (screen coords, `h` px tall). */
+    drawGhost(X, Y, h, phase, alpha) {
+      const ctx = this.ctx;
+      const w = h * 0.75;
+      ctx.save();
+      ctx.globalAlpha = alpha == null ? 1 : alpha;
+      ctx.translate(X, Y - h * 0.5);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath();
+      ctx.arc(0, 0, w / 2, Math.PI, 0);
+      ctx.lineTo(w / 2, h * 0.5);
+      for (let i = 0; i < 3; i++) {
+        const x0 = w / 2 - (i + 0.5) * (w / 3);
+        ctx.quadraticCurveTo(x0 + w / 12, h * (0.62 + 0.06 * Math.sin((phase || 0) * 3 + i)), x0 - w / 6 + w / 12, h * 0.5);
+      }
+      ctx.lineTo(-w / 2, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#263238';
+      ctx.beginPath();
+      ctx.ellipse(-w * 0.17, -h * 0.02, w * 0.08, h * 0.11, 0, 0, Math.PI * 2);
+      ctx.ellipse(w * 0.17, -h * 0.02, w * 0.08, h * 0.11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    /** A flapping bat silhouette (screen coords). */
+    drawBat(X, Y, size, flap) {
+      const ctx = this.ctx;
+      const up = Math.sin(flap) * size * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(X, Y);
+      ctx.quadraticCurveTo(X - size * 0.5, Y - up - size * 0.3, X - size, Y - up);
+      ctx.quadraticCurveTo(X - size * 0.7, Y - up * 0.3 + size * 0.15, X - size * 0.45, Y + size * 0.1);
+      ctx.quadraticCurveTo(X - size * 0.25, Y + size * 0.05, X, Y + size * 0.25);
+      ctx.quadraticCurveTo(X + size * 0.25, Y + size * 0.05, X + size * 0.45, Y + size * 0.1);
+      ctx.quadraticCurveTo(X + size * 0.7, Y - up * 0.3 + size * 0.15, X + size, Y - up);
+      ctx.quadraticCurveTo(X + size * 0.5, Y - up - size * 0.3, X, Y);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(X, Y + size * 0.02, size * 0.17, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     star(x, y, r) {
@@ -1996,12 +2277,16 @@
 
     drawParticles() {
       const ctx = this.ctx;
-      const maxPx = { confetti: 9, dust: 5, splash: 5, boing: 6, kick: 5 };
+      const maxPx = { confetti: 9, dust: 5, splash: 5, boing: 6, kick: 5, candy: 7, pumpkin: 7 };
       for (const p of this.particles) {
         ctx.globalAlpha = Math.max(0, p.life);
+        if (p.type === 'ghost') {
+          this.drawGhost(this.sx(p.x), this.sy(p.y), p.size, p.phase, Math.min(1, p.life * 1.5));
+          continue;
+        }
         ctx.fillStyle = p.color;
         const r = Math.min(maxPx[p.type] || 6, Math.max(2, p.size * this.scale));
-        if (p.type === 'confetti') ctx.fillRect(this.sx(p.x) - r / 2, this.sy(p.y) - r / 2, r, r * 0.6);
+        if (p.type === 'confetti' || p.type === 'candy') ctx.fillRect(this.sx(p.x) - r / 2, this.sy(p.y) - r / 2, r, r * 0.6);
         else {
           ctx.beginPath();
           ctx.arc(this.sx(p.x), this.sy(p.y), r, 0, Math.PI * 2);

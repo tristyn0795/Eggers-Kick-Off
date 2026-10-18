@@ -73,6 +73,7 @@ button { font-family: inherit; }
 }
 #trackMarks .mk.office { width: auto; height: auto; top: -11px; font-size: 18px; transform: translateX(-50%); background: none !important; }
 #trackBall { position: absolute; top: -9px; left: 0; font-size: 18px; transform: translateX(-50%); }
+#trackBall2 { position: absolute; top: -8px; left: 0; font-size: 15px; transform: translateX(-50%); filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3)); }
 #distance {
   position: absolute; top: 112px; left: 0; right: 0; text-align: center;
   font-family: var(--font-display); font-size: clamp(40px, 9vw, 76px); color: #fff;
@@ -601,3 +602,9 @@ body { -webkit-text-size-adjust: 100%; }
 .power-gain { color: #e65100; font-weight: 900; }
 @media (prefers-reduced-motion: reduce) { .hud-pill.power.armed { animation: none; } }
 @media (max-width: 420px) { .hud-pill.power .pw-name { display: none; } }
+
+/* ---- v1.8: Piñata, Split Shot, Spooky Season, leaderboard gear ---- */
+.season-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: #ff6f00; color: #fff; font-size: 11px; font-weight: 900; vertical-align: middle; white-space: nowrap; }
+.item.seasonal { box-shadow: inset 0 0 0 2px #ffb74d; }
+.season-banner { grid-column: 1 / -1; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, #3e2723, #6a1b9a); color: #fff3e0; font-weight: 700; font-size: 14px; }
+.lb-gear { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
