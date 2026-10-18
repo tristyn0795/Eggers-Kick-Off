@@ -383,3 +383,30 @@ test('Spooky Season items are only for sale in season, and stay yours after', ()
   assert.ok(C.isOwned(p, 'ball', 'jackoball'));
   assert.strictEqual(C.applyEquip(p, 'ball', 'jackoball'), null);
 });
+
+test('Halloween items you bought or won are never lost: after the season, through prestige, and in backups', () => {
+  const C = require('../shared/catalog');
+  const inSeason = Date.UTC(2026, 9, 20);
+  const after = Date.UTC(2026, 11, 25);
+  const p = Object.assign(C.newProfile(), { xp: 300000, coins: 1e7 });
+  // Buy every seasonal item in season.
+  const seasonal = [];
+  for (const [slot, list] of Object.entries(C.SLOTS)) {
+    for (const it of list) if (it.season) seasonal.push([slot, it.id]);
+  }
+  for (const [slot, id] of seasonal) assert.strictEqual(C.applyPurchase(p, `${slot}:${id}`, inSeason), null, `buy ${id}`);
+  // Out of season: can't be bought new, but owners keep and equip them.
+  const fresh = Object.assign(C.newProfile(), { xp: 300000, coins: 1e7 });
+  assert.match(C.applyPurchase(fresh, 'ball:jackoball', after), /Limited edition/);
+  for (const [slot, id] of seasonal) {
+    assert.ok(C.isOwned(p, slot, id), `${id} still owned after the season`);
+    assert.strictEqual(C.applyEquip(p, slot, id), null, `${id} equippable after the season`);
+    assert.strictEqual(C.applyPurchase(p, `${slot}:${id}`, after), 'Already owned');
+  }
+  // Prestige resets upgrades and coins, never gear.
+  p.upgrades = { boots: 50, ball: 50, training: 50, focus: 50, aero: 50, luck: 50 };
+  assert.strictEqual(C.applyPrestige(p), null);
+  for (const [slot, id] of seasonal) assert.ok(C.isOwned(p, slot, id), `${id} kept through prestige`);
+  // Next year the season comes back and it's still yours.
+  for (const [slot, id] of seasonal) assert.ok(C.isOwned(p, slot, id));
+});

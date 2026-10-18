@@ -52,7 +52,9 @@
     { id: 'ceo', name: 'Click Wise CEO', cost: 55000, level: 23, shirt: '#047dc3', shorts: '#0b2f4a', socks: '#0b2f4a', pattern: 'suit', alt: '#ffffff', tie: '#4caf50', pants: true, longSleeves: true, shoe: '#111111' },
     { id: 'platinumgi', name: 'Platinum Gi', cost: 0, level: 1, prestige: 3, shirt: '#e5e4e2', shorts: '#e5e4e2', socks: '#e5e4e2', pattern: 'gi', belt: '#7e57c2', beltTip: '#111111', medal: 'gold', pants: true, longSleeves: true, sandals: true },
     { id: 'legendgi', name: 'Eggers Legend Gi', cost: 400000, level: 50, shirt: '#ffd54f', shorts: '#ffd54f', socks: '#ffd54f', pattern: 'gi', belt: '#111111', beltTip: '#c62828', medal: 'gold', pants: true, longSleeves: true, sandals: true },
-    // 🎃 Spooky Season (limited time: buyable 1 Oct – 7 Nov, yours to keep forever)
+    // 🎃 Spooky Season (limited time: buyable 1 Oct – 7 Nov, yours to keep forever).
+    // Players own these by id: never remove or rename a seasonal item, or owners lose it.
+    // Ownership never checks the season (see isOwned/applyEquip); only buying does.
     { id: 'pumpkintee', name: 'Pumpkin Patch Tee', cost: 2500, level: 2, season: 'halloween', shirt: '#ef6c00', shorts: '#212121', socks: '#ef6c00', pattern: 'pumpkin', alt: '#1a1a1a' },
     { id: 'skeleton', name: 'Skele-Jason', cost: 6000, level: 5, season: 'halloween', shirt: '#151515', shorts: '#151515', socks: '#151515', pattern: 'skeleton', alt: '#f5f5f0', pants: true, longSleeves: true, bones: true, shoe: '#151515' },
     { id: 'vampire', name: 'Count Jasonula', cost: 12000, level: 9, season: 'halloween', shirt: '#111111', shorts: '#111111', socks: '#111111', pattern: 'suit', alt: '#ffffff', tie: '#b71c1c', pants: true, longSleeves: true, shoe: '#000000', cape: '#b71c1c' },
@@ -452,7 +454,7 @@
   }
 
   /** Validate and apply a purchase to a profile object. Returns an error string or null. */
-  function applyPurchase(profile, itemKey) {
+  function applyPurchase(profile, itemKey, now) {
     const level = levelFromXp(profile.xp);
     const [kind, id] = String(itemKey || '').split(':');
     if (kind === 'upgrade') {
@@ -475,7 +477,7 @@
     if (isOwned(profile, kind, id)) return 'Already owned';
     if (item.career) return 'Earn this by going Pro in Career mode';
     if (item.prestige) return `Reach prestige ⭐${item.prestige} to unlock this`;
-    if (item.season && !seasonActive(item.season)) return `${SEASONS[item.season].icon} Limited edition: back next ${SEASONS[item.season].name}`;
+    if (item.season && !seasonActive(item.season, now)) return `${SEASONS[item.season].icon} Limited edition: back next ${SEASONS[item.season].name}`;
     if (level < item.level) return `Reach level ${item.level} first`;
     if (profile.coins < item.cost) return 'Not enough coins';
     profile.coins -= item.cost;

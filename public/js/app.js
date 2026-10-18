@@ -50,6 +50,30 @@
 
   function saveOffline() { local.set('ek_offline', S.offline); }
 
+  // ---- Halloween Night: Oct 31 (the player's local date) the whole game goes spooky ----
+  // Preview it any day with ?theme=halloween in the address.
+  const themePreview = new URLSearchParams(location.search).get('theme');
+  const isHalloweenNight = (d) => d.getMonth() === 9 && d.getDate() === 31;
+  function applyTheme() {
+    const now = new Date();
+    const theme = themePreview === 'halloween' || isHalloweenNight(now) ? 'halloween' : null;
+    EK.theme = theme;
+    document.body.classList.toggle('theme-halloween', theme === 'halloween');
+    const strip = document.getElementById('seasonStrip');
+    if (!strip) return;
+    let html = '';
+    if (theme === 'halloween') {
+      html = '🎃 <b>Happy Halloween!</b> Tonight only, the field goes spooky, with candy and decorations at every landmark. 👻';
+    } else if (now.getMonth() === 9) {
+      const days = 31 - now.getDate();
+      html = `🎃 <b>Coming Oct 31: Halloween Night!</b> For one night the whole field goes spooky, with candy and decorations at every landmark. ${days === 1 ? 'Tomorrow!' : `${days} days to go.`}`;
+    }
+    strip.innerHTML = html;
+    strip.classList.toggle('hidden', !html);
+  }
+  applyTheme();
+  setInterval(applyTheme, 60000); // flips on (and off) at midnight
+
   /** ⭐ badge for a prestige rank. */
   function stars(n) {
     n = n | 0;

@@ -446,3 +446,18 @@ test('9 PERFECTs in a row break out the Piñata, and the server pays its prize',
     assert.strictEqual(next.boost.roundsLeft, z.rounds - 1);
   }
 });
+
+test('seasonal gear survives a database wipe through the signed device backup', async () => {
+  const created = await fetch(BASE + '/api/player', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '10.9.9.11' }, body: JSON.stringify({ name: 'Ghost Gary' }),
+  });
+  const { token, player } = await created.json();
+  // Pretend Ghost Gary won the Jack-o'-Ball from a Piñata: the server's backup carries owned gear.
+  const [body, sig] = player.backup.split('.');
+  const data = JSON.parse(Buffer.from(body, 'base64url').toString());
+  assert.deepStrictEqual(data.owned, player.owned, 'backups include owned gear');
+  assert.ok(sig);
+  // Restoring a backup brings back exactly the owned list it was signed with.
+  const me = await api('/api/me', null, token);
+  assert.deepStrictEqual(me.body.player.owned, player.owned);
+});

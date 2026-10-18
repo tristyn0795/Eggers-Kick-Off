@@ -185,6 +185,8 @@
 
     drawSky(st) {
       const { ctx, W, groundY } = this;
+      this.spooky = EK.theme === 'halloween';
+      if (this.spooky) return this.drawSpookySky(st);
       if (!this.skyGradient) {
         const g = ctx.createLinearGradient(0, 0, 0, groundY);
         g.addColorStop(0, '#4fb3f6');
@@ -216,9 +218,125 @@
       }
     }
 
-    cloud(x, y, s) {
+    /** Halloween night: purple sky, orange horizon glow, full moon, stars and bats. */
+    drawSpookySky(st) {
+      const { ctx, W, groundY } = this;
+      const t = st.time || 0;
+      if (!this.spookyGradient || this.spookyGradientH !== groundY) {
+        const g = ctx.createLinearGradient(0, 0, 0, groundY);
+        g.addColorStop(0, '#0d0620');
+        g.addColorStop(0.55, '#3a1257');
+        g.addColorStop(0.85, '#8a3a5c');
+        g.addColorStop(1, '#f08a3c');
+        this.spookyGradient = g;
+        this.spookyGradientH = groundY;
+      }
+      ctx.fillStyle = this.spookyGradient;
+      ctx.fillRect(0, 0, W, groundY + 2);
+      // Stars
+      if (!this.stars) {
+        let a = 1234567;
+        const rnd = () => ((a = (a * 1103515245 + 12345) >>> 0) / 4294967296);
+        this.stars = Array.from({ length: 70 }, () => ({ x: rnd(), y: rnd() * 0.6, r: 0.6 + rnd() * 1.4, p: rnd() * 6 }));
+      }
+      for (const s of this.stars) {
+        ctx.fillStyle = `rgba(255,255,240,${0.35 + 0.35 * Math.sin(t * 2 + s.p)})`;
+        ctx.fillRect(((s.x * W - this.camX * 0.02) % W + W) % W, s.y * groundY, s.r, s.r);
+      }
+      // Full moon
+      const mx = W * 0.82, my = groundY * 0.18;
+      const halo = ctx.createRadialGradient(mx, my, 30, mx, my, 110);
+      halo.addColorStop(0, 'rgba(255,240,200,0.35)');
+      halo.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(mx, my, 110, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff4cf';
+      ctx.beginPath(); ctx.arc(mx, my, 40, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(214,196,150,0.55)';
+      for (const [dx, dy, r] of [[-12, -8, 8], [10, 6, 6], [-4, 14, 5], [14, -14, 4]]) { ctx.beginPath(); ctx.arc(mx + dx, my + dy, r, 0, Math.PI * 2); ctx.fill(); }
+      // Wispy dark clouds
+      const drift = t * 6;
+      for (const c of this.clouds) {
+        const span = 3200;
+        let x = (c.x - this.camX * 0.25 - drift) % span;
+        if (x < 0) x += span;
+        x -= 200;
+        if (x > W + 200) continue;
+        this.cloud(x, c.y * groundY, c.s, 'rgba(60,40,80,0.55)');
+      }
+      // Bats flapping across the moonlit sky
+      ctx.fillStyle = '#120a1c';
+      for (let i = 0; i < 6; i++) {
+        const speed = 22 + i * 7;
+        const x = ((i * 397 + t * speed - this.camX * 0.05) % (W + 200) + W + 200) % (W + 200) - 100;
+        const y = groundY * (0.12 + 0.07 * i) + Math.sin(t * 2 + i) * 12;
+        this.drawBat(x, y, 7 + (i % 3) * 3, t * 14 + i * 2);
+      }
+    }
+
+    /** Jack-o'-lanterns, candy and a cobweb at a landmark sign (Halloween night). */
+    drawSpookyDecor(cx, signY, w) {
+      const ctx = this.ctx, gy = this.groundY, t = this.time || 0;
+      // Cobweb in the sign's top-left corner
+      const wx = cx - w / 2, wy = signY - 38;
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (let i = 0; i <= 4; i++) { const a = (i / 4) * (Math.PI / 2); ctx.moveTo(wx, wy); ctx.lineTo(wx + Math.cos(a) * 18, wy + Math.sin(a) * 18); }
+      for (const r of [7, 12, 17]) {
+        for (let i = 0; i < 4; i++) {
+          const a0 = (i / 4) * (Math.PI / 2), a1 = ((i + 1) / 4) * (Math.PI / 2);
+          ctx.moveTo(wx + Math.cos(a0) * r, wy + Math.sin(a0) * r);
+          ctx.quadraticCurveTo(wx + Math.cos((a0 + a1) / 2) * r * 0.8, wy + Math.sin((a0 + a1) / 2) * r * 0.8, wx + Math.cos(a1) * r, wy + Math.sin(a1) * r);
+        }
+      }
+      ctx.stroke();
+      // A little spider dangling from the corner
+      const sy = wy + 26 + Math.sin(t * 2 + cx * 0.01) * 4;
+      ctx.beginPath(); ctx.moveTo(wx + 9, wy + 9); ctx.lineTo(wx + 9, sy); ctx.stroke();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(wx + 9, sy + 2, 3, 0, Math.PI * 2); ctx.fill();
+      // Candy pile at the foot of the pole
+      const cols = ['#ff4081', '#ffeb3b', '#00e5ff', '#76ff03', '#ff9100', '#e040fb', '#ffffff'];
+      for (let i = 0; i < 9; i++) {
+        const x = cx - 14 + ((i * 7) % 28) + (i > 5 ? 3 : 0);
+        const y = gy - 2 - (i > 5 ? 5 : i > 2 ? 2.5 : 0);
+        ctx.fillStyle = cols[i % cols.length];
+        ctx.beginPath(); ctx.ellipse(x, y, 3.2, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - 3, y); ctx.lineTo(x - 5.5, y - 1.8); ctx.lineTo(x - 5.5, y + 1.8); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x + 3, y); ctx.lineTo(x + 5.5, y - 1.8); ctx.lineTo(x + 5.5, y + 1.8); ctx.fill();
+      }
+      // Candy corn on top
+      ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.moveTo(cx - 3, gy - 9); ctx.lineTo(cx + 3, gy - 9); ctx.lineTo(cx, gy - 17); ctx.fill();
+      ctx.fillStyle = '#ff9100'; ctx.fillRect(cx - 2.2, gy - 12.5, 4.4, 2);
+      // Jack-o'-lanterns either side
+      for (const [dx, size] of [[-30, 9], [28, 7]]) this.drawPumpkin(cx + dx, gy - size * 0.9, size, t + dx);
+    }
+
+    drawPumpkin(x, y, r, t) {
       const ctx = this.ctx;
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      const flicker = 0.75 + 0.25 * Math.sin(t * 11) * Math.sin(t * 6.1);
+      const g = ctx.createRadialGradient(x, y, r * 0.4, x, y, r * 2.4);
+      g.addColorStop(0, `rgba(255,170,60,${0.35 * flicker})`);
+      g.addColorStop(1, 'rgba(255,170,60,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r * 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ef6c00';
+      ctx.beginPath(); ctx.ellipse(x, y, r * 1.15, r * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#bf360c'; ctx.lineWidth = Math.max(1, r * 0.1);
+      ctx.beginPath(); ctx.ellipse(x, y, r * 0.4, r * 0.93, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#4e342e'; ctx.fillRect(x - r * 0.12, y - r * 1.25, r * 0.24, r * 0.4);
+      ctx.fillStyle = `rgba(255,${Math.round(205 + 40 * flicker)},80,1)`;
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.6, y - r * 0.05); ctx.lineTo(x - r * 0.35, y - r * 0.45); ctx.lineTo(x - r * 0.12, y - r * 0.05);
+      ctx.moveTo(x + r * 0.12, y - r * 0.05); ctx.lineTo(x + r * 0.35, y - r * 0.45); ctx.lineTo(x + r * 0.6, y - r * 0.05);
+      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x - r * 0.6, y + r * 0.2); ctx.quadraticCurveTo(x, y + r * 0.8, x + r * 0.6, y + r * 0.2); ctx.lineTo(x, y + r * 0.42); ctx.closePath(); ctx.fill();
+    }
+
+    cloud(x, y, s, color) {
+      const ctx = this.ctx;
+      ctx.fillStyle = color || 'rgba(255,255,255,0.9)';
       ctx.beginPath();
       ctx.arc(x, y, 22 * s, 0, Math.PI * 2);
       ctx.arc(x + 26 * s, y - 10 * s, 28 * s, 0, Math.PI * 2);
@@ -229,7 +347,10 @@
 
     drawHills() {
       const { ctx, W, groundY } = this;
-      const layers = [
+      const layers = this.spooky ? [
+        { k: 0.35, color: '#2a1d3d', base: 70, a: 28, f1: 0.004, f2: 0.011 },
+        { k: 0.9, color: '#22382c', base: 34, a: 18, f1: 0.007, f2: 0.017 },
+      ] : [
         { k: 0.35, color: '#9fd3a8', base: 70, a: 28, f1: 0.004, f2: 0.011 },
         { k: 0.9, color: '#7cc487', base: 34, a: 18, f1: 0.007, f2: 0.017 },
       ];
@@ -251,19 +372,19 @@
 
     drawGround() {
       const { ctx, W, H, groundY, scale } = this;
-      ctx.fillStyle = '#58b05c';
+      ctx.fillStyle = this.spooky ? '#2f5a33' : '#58b05c';
       ctx.fillRect(0, groundY, W, H - groundY);
       const step = niceStep(140 / scale);
       const left = this.camX - (this.W * this.anchor) / scale;
       const right = left + W / scale;
-      ctx.fillStyle = '#62bd66';
+      ctx.fillStyle = this.spooky ? '#35643a' : '#62bd66';
       for (let k = Math.floor(left / step); k * step < right; k++) {
         if (k % 2 !== 0) continue;
         const x0 = this.sx(k * step);
         ctx.fillRect(x0, groundY, step * scale, H - groundY);
       }
       // Horizon edge
-      ctx.fillStyle = '#4a9d4f';
+      ctx.fillStyle = this.spooky ? '#24472a' : '#4a9d4f';
       ctx.fillRect(0, groundY, W, 3);
     }
 
@@ -285,7 +406,7 @@
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fillRect(x - 1, groundY, 2, 10);
         if (m === 0) continue;
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillStyle = this.spooky ? 'rgba(255,236,210,0.75)' : 'rgba(0,0,0,0.55)';
         ctx.fillText(`${m.toLocaleString()} m`, x, groundY + 26);
       }
     }
@@ -328,6 +449,7 @@
         ctx.fillText(label, cx, signY - 21);
         ctx.font = '11px system-ui, sans-serif';
         ctx.fillText(sub, cx, signY - 7);
+        if (this.spooky) this.drawSpookyDecor(cx, signY, w);
       }
     }
 

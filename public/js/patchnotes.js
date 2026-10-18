@@ -27,7 +27,14 @@ window.EK_PATCH_NOTES = [
           "Jack-o'-Ball: a glowing carved pumpkin that breaks apart when it stops, and lets the ghosts out. 👻",
           'Outfits: Pumpkin Patch Tee, Skele-Jason and Count Jasonula (cape included). 🧛',
           'Trails: Bat Swarm 🦇 and Ghost Trail 👻.',
-          'Limited edition: buy it during Spooky Season and it is yours to keep forever.',
+          'Limited edition: buy it (or win it from a Piñata) during Spooky Season and it is yours forever. It stays in your Locker after the season, through prestige, and on every device you log in on.',
+        ],
+      },
+      {
+        heading: '🌕 Coming Oct 31: Halloween Night',
+        items: [
+          'For one night only, the whole game goes spooky: a moonlit purple sky, bats overhead, and jack-o\'-lanterns, candy and cobwebs at every landmark.',
+          'It switches on automatically on Halloween (your local date) and is gone the next morning.',
         ],
       },
       {

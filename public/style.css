@@ -608,3 +608,14 @@ body { -webkit-text-size-adjust: 100%; }
 .item.seasonal { box-shadow: inset 0 0 0 2px #ffb74d; }
 .season-banner { grid-column: 1 / -1; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, #3e2723, #6a1b9a); color: #fff3e0; font-weight: 700; font-size: 14px; }
 .lb-gear { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+
+/* ---- v1.8.1: Halloween Night (Oct 31) + coming-soon strip ---- */
+.season-strip { margin: 8px 0 2px; padding: 7px 10px; border-radius: 12px; background: linear-gradient(135deg, #2b1240, #5b1f73); color: #ffe0b2; font-size: 12.5px; font-weight: 700; line-height: 1.35; text-align: center; }
+.season-strip b { color: #ffb74d; }
+body.theme-halloween { background: #0d0620; }
+body.theme-halloween .logo span:first-child { color: #ff8f00; text-shadow: 0 4px 0 #6a1b9a; }
+body.theme-halloween .logo span:last-child { color: #b388ff; text-shadow: 0 3px 0 #311b92; }
+body.theme-halloween .menu-card { box-shadow: 0 0 0 3px #ff8f00, 0 12px 40px rgba(106, 27, 154, 0.55); }
+body.theme-halloween .hud-pill { box-shadow: 0 0 0 2px rgba(255, 143, 0, 0.75), 0 3px 10px rgba(0, 0, 0, 0.25); }
+body.theme-halloween #distance { color: #ffb74d; }
+body.theme-halloween #hint { color: #ffe0b2; }
