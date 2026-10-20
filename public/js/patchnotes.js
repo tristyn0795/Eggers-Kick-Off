@@ -1,6 +1,47 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.9.0',
+    date: '20 Oct 2026',
+    title: 'Spooky gear drop & critters 👁️🔮🐍',
+    sections: [
+      {
+        heading: '🎃 New Spooky Season balls (thanks John!)',
+        items: [
+          '👁️ Eye-Ball: blinks in flight. When it stops it sprouts legs, waves hello, and burrows underground.',
+          '🔮 Crystal Ball: glows on its stand, and a vision of Henry in a witch hat flickers inside.',
+          '🛸 Otherworldly Orb: lights up, levitates and zooms off into the sky.',
+          '🧪 Brew Ball: shatters, spills its potion, and a little zombie climbs out and shuffles away.',
+          '🐍 Medusa Ball: crowned with snakes. Rumour has it Henry should keep his distance… 🗿',
+        ],
+      },
+      {
+        heading: '🧙 New outfits',
+        items: [
+          'Wizard Robes (with a starry hat), Cultist Robes (hood up) and Hockey Mask Jason. 🏒',
+          'Pirate Captain: tricorn, eyepatch and sash. This one stays in the shop all year. 🏴‍☠️',
+        ],
+      },
+      {
+        heading: '🪅 Piñata skins',
+        items: [
+          'During Spooky Season your Piñata might show up as a Trick-or-Treat Pail that spills candy as it flies, or a Brain… and something always comes running for a snack.',
+        ],
+      },
+      {
+        heading: '🐸 Target critters',
+        items: [
+          'Every target zone has a resident creature. Stop your ball in a zone and it pops out to say hi: a raccoon at the Car Park, a frog at the Duck Pond, a mountain goat on the Peak, a dragon at the Castle and more.',
+          'On Halloween Night they all dress up. 👻',
+        ],
+      },
+      {
+        heading: '🏅 And…',
+        items: ['A new secret milestone. Good luck. 🐍'],
+      },
+    ],
+  },
+  {
     version: '1.8.0',
     date: '18 Oct 2026',
     title: 'Piñatas, Split Shots & Spooky Season 🪅🎃',

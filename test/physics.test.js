@@ -378,7 +378,9 @@ test('Spooky Season items are only for sale in season, and stay yours after', ()
   assert.ok(!C.seasonActive('halloween', Date.UTC(2026, 10, 8)));
   assert.ok(!C.seasonActive('halloween', Date.UTC(2027, 8, 30)));
   const spooky = [...C.OUTFITS, ...C.BALLS, ...C.TRAILS].filter((i) => i.season === 'halloween').map((i) => i.id).sort();
-  assert.deepStrictEqual(spooky, ['bats', 'ghosts', 'jackoball', 'pumpkintee', 'skeleton', 'vampire']);
+  assert.deepStrictEqual(spooky, ['bats', 'brew', 'crystal', 'cultist', 'eyeball', 'ghosts', 'hockey', 'jackoball', 'medusa', 'orb', 'pumpkintee', 'skeleton', 'vampire', 'wizard']);
+  // The pirate is a year-round outfit.
+  assert.ok(!C.OUTFITS.find((o) => o.id === 'pirate').season);
   const p = Object.assign(C.newProfile(), { owned: [...C.DEFAULT_OWNED, 'ball:jackoball'] });
   assert.ok(C.isOwned(p, 'ball', 'jackoball'));
   assert.strictEqual(C.applyEquip(p, 'ball', 'jackoball'), null);
@@ -409,4 +411,16 @@ test('Halloween items you bought or won are never lost: after the season, throug
   for (const [slot, id] of seasonal) assert.ok(C.isOwned(p, slot, id), `${id} kept through prestige`);
   // Next year the season comes back and it's still yours.
   for (const [slot, id] of seasonal) assert.ok(C.isOwned(p, slot, id));
+});
+
+test('Porch Goose: a Medusa Ball stopped at the Duck Pond turns Henry to stone (secret milestone)', () => {
+  const C = require('../shared/catalog');
+  const pond = { name: 'Duck Pond', ring: 'OUTER RING', points: 25 };
+  const medusa = Object.assign(C.newProfile(), { equipped: { outfit: 'gi', ball: 'medusa', trail: 'none' } });
+  assert.ok(C.checkMilestones(medusa, { kick: { target: pond, label: 'GOOD', distance: 760 } }).some((m) => m.id === 'porchgoose'));
+  const plain = C.newProfile();
+  assert.ok(!C.checkMilestones(plain, { kick: { target: pond, label: 'GOOD', distance: 760 } }).some((m) => m.id === 'porchgoose'));
+  const elsewhere = Object.assign(C.newProfile(), { equipped: { outfit: 'gi', ball: 'medusa', trail: 'none' } });
+  assert.ok(!C.checkMilestones(elsewhere, { kick: { target: { name: 'Car Park', ring: 'BULLSEYE', points: 30 }, label: 'GOOD', distance: 400 } }).some((m) => m.id === 'porchgoose'));
+  assert.ok(C.MILESTONES.find((m) => m.id === 'porchgoose').secret, 'stays hidden until found');
 });

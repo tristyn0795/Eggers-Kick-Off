@@ -1220,7 +1220,7 @@
       const done = C.MILESTONES.filter((m) => have.has(m.id)).length;
       grid.innerHTML = `<div class="ms-summary">🏅 ${done} / ${C.MILESTONES.length} milestones complete</div>` + C.MILESTONES.map((m) => `
         <div class="item ms ${have.has(m.id) ? 'equipped' : ''}"><div class="top"><span class="icon">${have.has(m.id) ? '🏅' : '🔒'}</span>
-          <div><div class="name">${esc(m.name)}</div><div class="desc">${esc(m.desc)}</div></div></div>
+          <div><div class="name">${m.secret && !have.has(m.id) ? '❓ Secret milestone' : esc(m.name)}</div><div class="desc">${esc(m.secret && !have.has(m.id) ? m.secret : m.desc)}</div></div></div>
           <div class="ms-reward">${have.has(m.id) ? '✓ Claimed' : `Reward 🪙 ${fmt(m.reward)}`}</div></div>`).join('');
     } else {
       const list = C.SLOTS[S.shopTab];
@@ -1266,11 +1266,11 @@
 
   function itemIcon(slot, it) {
     if (slot === 'outfit') {
-      const special = { astro: '🧑‍🚀', suit: '👔', pumpkintee: '🎃', skeleton: '💀', vampire: '🧛' };
+      const special = { astro: '🧑‍🚀', suit: '👔', pumpkintee: '🎃', skeleton: '💀', vampire: '🧛', wizard: '🧙', hockey: '🏒', cultist: '🕯️', pirate: '🏴‍☠️' };
       return `<span class="icon" style="background:${it.shirt}">${special[it.id] || (it.pattern === 'gi' ? '🥋' : '👕')}</span>`;
     }
     if (slot === 'ball') {
-      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆', galaxy: '🌌', blackhole: '🕳️', star: '⭐', diamond: '💎', jackoball: '🎃' };
+      const icons = { egg: '🥚', fire: '🔥', beach: '🏖️', henry: '🪿', disco: '🪩', planet: '🪐', moon: '🌕', mastery: '🏆', galaxy: '🌌', blackhole: '🕳️', star: '⭐', diamond: '💎', jackoball: '🎃', eyeball: '👁️', brew: '🧪', crystal: '🔮', orb: '🛸', medusa: '🐍' };
       return `<span class="icon" style="background:${it.base}">${icons[it.style] || '⚽'}</span>`;
     }
     const icons = { none: '➖', dots: '⋯', sparkle: '✨', rainbow: '🌈', flame: '🔥', feathers: '🪶', stars: '🌠', confetti: '🎉', comet: '☄️', cosmic: '🌠', aura: '💫', supernova: '💥', bats: '🦇', ghosts: '👻' };

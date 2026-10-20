@@ -130,6 +130,7 @@
         wind: P.windFor(seed),
         golden: P.isGoldenBall(seed),
         power: this.mode === 'play' ? P.powerBallFor(seed, this.history) : this.mode === 'replay' ? (cfg.power || null) : null,
+        powerSkin: null,
         objects: P.fieldObjects(seed, st.luck),
         juggler: P.createJuggler(seed, st),
         phase: 'juggle',
@@ -145,6 +146,11 @@
         shown: false,
         contact: null,
       };
+      // During Spooky Season the Piñata comes in random Halloween skins (just looks; the prize is the same).
+      if (k.power === 'pinata') {
+        const skins = window.EKCatalog.seasonActive('halloween') ? ['star', 'basket', 'brain'] : ['star'];
+        k.powerSkin = skins[P.hashSeed(seed, 0x5C1) % skins.length];
+      }
       this.k = k;
       this.fast = false;
       this.r.setField(k.objects);
@@ -292,7 +298,7 @@
         if (e.type === 'pad') { sfx().pad(); this.r.burst('boing', e.x, 0.2, 14); this.hud.toastSmall('BOING! Bounce pad'); }
         else if (e.type === 'puddle') { sfx().splash(); this.r.burst('splash', e.x, 0.1, 18); this.hud.toastSmall('Splash! Puddle'); }
         else if (e.type === 'crater') { sfx().kick(1); this.r.burst('crater', e.x, 0.1, 50); this.hud.toastSmall('☄️ IMPACT!'); }
-        else if (e.type === 'pinata') { sfx().target(3); this.r.burst('confetti', e.x, 0.4, 70); this.r.burst('candy', e.x, 0.3, 40); this.hud.toastSmall('🪅 CRACK! The piñata bursts open!'); }
+        else if (e.type === 'pinata') { sfx().target(3); this.r.burst('confetti', e.x, 0.4, 70); this.r.burst('candy', e.x, 0.3, 40); this.hud.toastSmall(k.powerSkin === 'basket' ? '🎃 The pail tips over: CANDY!' : k.powerSkin === 'brain' ? '🧠 Uh oh, the zombies smell a snack!' : '🪅 CRACK! The piñata bursts open!'); }
         else if (e.type === 'split') { sfx().pad(); this.r.burst('kick', e.x, this.ballPos().y, 14); this.hud.toastSmall('✂️ SPLIT!'); }
         else if (e.type === 'magnet') { sfx().pad(); this.r.burst('magnet', e.x, 0.3, 30); this.hud.toastSmall('🧲 Magnet pull… BULLSEYE!'); }
         else if (e.v > 2) { sfx().bounce(e.v); this.r.burst('dust', e.x, 0.05, 6); }
@@ -309,6 +315,7 @@
     showResult(res) {
       const k = this.k;
       const sim = k.sim;
+      k.restAt = this.time; // landing animations (Jack-o'-Ball, Eye-Ball, critters…) count from here
       k.phase = 'result';
       k.resultT = 0;
       const points = res.points != null ? res.points : k.localPoints;
@@ -509,27 +516,35 @@
         const s0 = Math.max(k.sim.splitFrame - 1, i - 70);
         trail2 = sp.slice(s0 * 2, i * 2);
       }
-      // Jack-o'-Ball: when it comes to rest it breaks apart and ghosts float out.
-      const jack = this.cfg && this.cfg.equipped && this.cfg.equipped.ball === 'jackoball' && !k.power;
-      if (jack && k.phase === 'result' && !k.jackBroke && k.sim && !k.sim.whiff) {
-        k.jackBroke = true;
-        this.r.burst('ghost', ball.x, 0.3, 3);
-        this.r.burst('pumpkin', ball.x, 0.1, 12);
+      // Landing animations: special balls do something once they come to rest.
+      const eqBall = this.cfg && this.cfg.equipped ? this.cfg.equipped.ball : null;
+      const atRest = k.phase === 'result' && k.restAt != null && k.sim && !k.sim.whiff;
+      const restT = atRest ? this.time - k.restAt : null;
+      if (atRest && !k.restBurst) {
+        k.restBurst = true;
+        this.r.restBurst(k.power ? `power:${k.power}:${k.powerSkin || ''}` : eqBall, ball.x);
       }
+      const restTarget = atRest ? ((k.resolution && k.resolution.result && k.resolution.result.target) || k.sim.target) : null;
+      // 🐍 Medusa Ball at the Duck Pond turns Henry into a concrete porch goose.
+      const henryStone = !!(restTarget && restTarget.name === 'Duck Pond' && eqBall === 'medusa' && !k.power);
 
       r.draw({
         camX: this.camX,
         scale: this.scale,
         anchor: this.anchor,
         time: this.time,
-        ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true, broken: !!k.jackBroke },
+        ball: { x: ball.x, y: ball.y, rot: k.rot, visible: true, rest: k.power ? null : restT },
+        powerSkin: k.powerSkin || null,
+        powerRest: k.power ? restT : null,
+        henryStone,
+        critter: restTarget && restT != null ? { x: ball.x, name: restTarget.name, t: restT } : null,
         ball2,
         trail2,
         jason: this.jasonPose(ball),
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
         golden: k.golden && this.mode === 'play',
         power: k.power || null,
-        henryHappy: k.phase === 'result' && !!k.henryHappy,
+        henryHappy: k.phase === 'result' && !!k.henryHappy && !henryStone,
         henryBuddy: this.mode === 'attract',
         sweetWidth: k.st.sweetWidth,
         trail,

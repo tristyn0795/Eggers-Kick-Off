@@ -58,6 +58,10 @@
     { id: 'pumpkintee', name: 'Pumpkin Patch Tee', cost: 2500, level: 2, season: 'halloween', shirt: '#ef6c00', shorts: '#212121', socks: '#ef6c00', pattern: 'pumpkin', alt: '#1a1a1a' },
     { id: 'skeleton', name: 'Skele-Jason', cost: 6000, level: 5, season: 'halloween', shirt: '#151515', shorts: '#151515', socks: '#151515', pattern: 'skeleton', alt: '#f5f5f0', pants: true, longSleeves: true, bones: true, shoe: '#151515' },
     { id: 'vampire', name: 'Count Jasonula', cost: 12000, level: 9, season: 'halloween', shirt: '#111111', shorts: '#111111', socks: '#111111', pattern: 'suit', alt: '#ffffff', tie: '#b71c1c', pants: true, longSleeves: true, shoe: '#000000', cape: '#b71c1c' },
+    { id: 'cultist', name: 'Cultist Robes', cost: 8000, level: 7, season: 'halloween', shirt: '#5d0f12', shorts: '#4a0b0e', socks: '#4a0b0e', pattern: 'rope', alt: '#d4a017', pants: true, longSleeves: true, robe: true, hat: 'hood', shoe: '#1a1a1a' },
+    { id: 'wizard', name: 'Wizard Robes', cost: 10000, level: 8, season: 'halloween', shirt: '#4527a0', shorts: '#38208a', socks: '#38208a', pattern: 'stars', alt: '#ffd54f', pants: true, longSleeves: true, robe: true, hat: 'wizard', sandals: true },
+    { id: 'hockey', name: 'Hockey Mask Jason', cost: 13000, level: 10, season: 'halloween', shirt: '#3e4a3d', shorts: '#2b2b2b', socks: '#2b2b2b', pattern: 'jacket', alt: '#2f382e', pants: true, longSleeves: true, mask: 'hockey', shoe: '#3e2723' },
+    { id: 'pirate', name: 'Pirate Captain', cost: 16000, level: 13, shirt: '#f5f0e6', shorts: '#212121', socks: '#212121', pattern: 'pirate', alt: '#212121', sash: '#c62828', pants: true, longSleeves: true, hat: 'tricorn', eyepatch: true, shoe: '#3e2723' },
     { id: 'cosmicsuit', name: 'Cosmic Suit', cost: 2000000, level: 100, shirt: '#311b92', shorts: '#1a237e', socks: '#1a237e', pattern: 'suit', alt: '#b388ff', tie: '#ffd54f', pants: true, longSleeves: true, shoe: '#000000' },
   ];
 
@@ -77,6 +81,11 @@
     { id: 'diamond', name: 'Diamond Ball', cost: 0, level: 1, prestige: 5, base: '#b2ebf2', patch: '#ffffff', style: 'diamond' },
     { id: 'galaxy', name: 'Galaxy Ball', cost: 250000, level: 40, base: '#1a0b3d', patch: '#b388ff', style: 'galaxy' },
     { id: 'jackoball', name: "Jack-o'-Ball", cost: 4000, level: 3, season: 'halloween', base: '#ff8f00', patch: '#3e2723', style: 'jackoball' },
+    { id: 'eyeball', name: 'Eye-Ball', cost: 5000, level: 4, season: 'halloween', base: '#fafafa', patch: '#1565c0', style: 'eyeball' },
+    { id: 'brew', name: 'Brew Ball', cost: 7000, level: 6, season: 'halloween', base: '#76ff03', patch: '#6d4c41', style: 'brew' },
+    { id: 'crystal', name: 'Crystal Ball', cost: 9000, level: 7, season: 'halloween', base: '#b39ddb', patch: '#ede7f6', style: 'crystal' },
+    { id: 'orb', name: 'Otherworldly Orb', cost: 14000, level: 11, season: 'halloween', base: '#b0bec5', patch: '#00e5ff', style: 'orb' },
+    { id: 'medusa', name: 'Medusa Ball', cost: 18000, level: 13, season: 'halloween', base: '#558b2f', patch: '#9ccc65', style: 'medusa' },
     { id: 'blackhole', name: 'Black Hole Ball', cost: 1000000, level: 80, base: '#000000', patch: '#ff9100', style: 'blackhole' },
   ];
 
@@ -123,6 +132,7 @@
     { id: 'pr10', name: 'Prestige Legend', desc: 'Reach prestige 10', reward: 200000, prestige: 10 },
     { id: 'perfect', name: 'Perfect Strike', desc: 'Land a PERFECT kick', reward: 150, label: 'PERFECT!' },
     { id: 'powerup', name: 'Powered Up', desc: 'Land 5 PERFECT kicks in a row to earn a Power Ball', reward: 750, power: 'any' },
+    { id: 'porchgoose', name: 'Porch Goose', desc: 'Stop a 🐍 Medusa Ball at the Duck Pond and turn Henry to stone', secret: 'A secret involving Henry and a stony stare… 🐍', reward: 3000, medusa: true },
     { id: 'pinata', name: 'Fiesta!', desc: 'Land 9 PERFECT kicks in a row and smash a 🪅 Piñata', reward: 2000, power: 'pinata' },
     { id: 'meteor', name: 'Extinction Event', desc: 'Kick a ☄️ Meteor', reward: 500, power: 'meteor' },
     { id: 'magnetbull', name: 'Magnetic Personality', desc: 'Pull a 🧲 Magnet Ball into a bullseye', reward: 1000, power: 'magnet', ring: 'BULLSEYE' },
@@ -390,7 +400,8 @@
       else if (ev.kick) {
         const k = ev.kick;
         const t = k.target;
-        if (m.power) ok = !!k.power && (m.power === 'any' || k.power === m.power) && (!m.ring || (!!t && t.ring === m.ring && k.magnetFrom != null));
+        if (m.medusa) ok = !!t && t.name === 'Duck Pond' && !!profile.equipped && profile.equipped.ball === 'medusa' && !k.power;
+        else if (m.power) ok = !!k.power && (m.power === 'any' || k.power === m.power) && (!m.ring || (!!t && t.ring === m.ring && k.magnetFrom != null));
         else if (m.label) ok = k.label === m.label;
         else if (m.anyTarget) ok = !!t;
         else if (m.target && m.ring) ok = !!t && t.name === m.target && t.ring === m.ring;
