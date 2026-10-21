@@ -72,6 +72,9 @@ itself. Nobody can post a fake distance.
 
 ## Deploy on Railway
 
+> The live game auto-deploys: every push to `main` on GitHub builds and goes live on Railway in a
+> minute or two (the service's **Settings → Source** is linked to `tristyn0795/Eggers-Kick-Off`, branch `main`).
+
 1. Push this folder to a GitHub repo.
 2. In Railway: **New Project → Deploy from GitHub repo** → pick the repo.
    Railway detects Node and runs `npm start` (see `railway.json`, which also sets the
