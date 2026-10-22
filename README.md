@@ -74,6 +74,8 @@ itself. Nobody can post a fake distance.
 
 > The live game auto-deploys: every push to `main` on GitHub builds and goes live on Railway in a
 > minute or two (the service's **Settings → Source** is linked to `tristyn0795/Eggers-Kick-Off`, branch `main`).
+> If a push doesn't go live, check [status.railway.com](https://status.railway.com): pushes made while Railway has
+> builds paused are dropped, so redeploy from the dashboard (or push again) once it recovers.
 
 1. Push this folder to a GitHub repo.
 2. In Railway: **New Project → Deploy from GitHub repo** → pick the repo.
