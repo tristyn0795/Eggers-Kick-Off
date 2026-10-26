@@ -1,6 +1,22 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.11.0',
+    date: '26 Oct 2026',
+    title: "Henry's Closet 🪿👑",
+    sections: [
+      {
+        heading: "🪿 New: Henry's Closet",
+        items: [
+          "Henry has his own wardrobe! Find it in Locker → 🪿 Characters → Henry's Closet.",
+          'Dapper Bow Tie, Click Wise Duck Tee, Cool Shades & Chain, Porch Goose Rain Bonnet, Chef Henry, Captain Quack, Super Duck, a Black Belt Gi to match Jason, Astro-Duck and King of the Pond.',
+          '🎃 Limited for Spooky Season: Pumpkin Duck and Witchy Henry.',
+          "Henry's outfits are separate from Jason's, so you can dress both and switch any time. The leaderboard shows what Henry is wearing.",
+        ],
+      },
+    ],
+  },
+  {
     version: '1.10.0',
     date: '26 Oct 2026',
     title: 'Play as Henry! 🪿',

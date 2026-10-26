@@ -605,7 +605,7 @@
       const H = 0.95 * this.scale; // a little under a metre tall
       ctx.save();
       ctx.translate(X, 0); ctx.scale(-1, 1); ctx.translate(-X, 0);
-      this.drawHenry(X, this.groundY, H, { happy: p.cheer, lift: p.lift * this.scale, kick: p.kick });
+      this.drawHenry(X, this.groundY, H, { happy: p.cheer, lift: p.lift * this.scale, kick: p.kick, fit: this.equipped.henryfit });
       ctx.restore();
       if (p.nameTag) {
         ctx.font = `800 ${Math.max(11, 0.12 * this.scale)}px system-ui`;
@@ -615,6 +615,174 @@
         ctx.fillText('HENRY', X + 1, ty + 1);
         ctx.fillStyle = '#fff';
         ctx.fillText('HENRY', X, ty);
+      }
+    }
+
+    /**
+     * Henry's Closet. Drawn in Henry's own space (he faces left here; the player version is mirrored).
+     * 'back' goes behind his body (capes), 'front' over it (hats, shirts, glasses).
+     */
+    drawHenryFit(layer, fit, g) {
+      const ctx = this.ctx;
+      const { x, by, hx, hy, u, t } = g;
+      const bodyClip = (fill) => {
+        ctx.save();
+        ctx.beginPath(); ctx.ellipse(x + 0.2 * u, by, 3.05 * u, 2.65 * u, 0, 0, Math.PI * 2); ctx.clip();
+        fill();
+        ctx.restore();
+      };
+      const cape = (color, lining) => {
+        const sway = Math.sin(t * 3) * 0.3 * u;
+        // Ties at the neck and billows out behind him, past his tail.
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x - 1.4 * u, by - 3.0 * u);
+        ctx.quadraticCurveTo(x + 4.5 * u + sway, by - 4.2 * u, x + 6.4 * u + sway * 1.5, by + 1.6 * u);
+        ctx.quadraticCurveTo(x + 4.5 * u, by + 3.3 * u, x + 1.5 * u, by + 2.6 * u);
+        ctx.closePath(); ctx.fill();
+        if (lining) {
+          ctx.fillStyle = lining;
+          ctx.beginPath();
+          ctx.moveTo(x + 6.4 * u + sway * 1.5, by + 1.6 * u);
+          ctx.quadraticCurveTo(x + 5.0 * u, by + 2.9 * u, x + 3.3 * u, by + 2.9 * u);
+          ctx.quadraticCurveTo(x + 5.0 * u, by + 1.6 * u, x + 6.4 * u + sway * 1.5, by + 1.6 * u);
+          ctx.closePath(); ctx.fill();
+        }
+      };
+      const tricorn = () => {
+        ctx.fillStyle = '#1b1b1b';
+        ctx.beginPath(); ctx.arc(hx + 0.2 * u, hy - 1.4 * u, 1.4 * u, Math.PI, 0); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(hx - 2.2 * u, hy - 1.2 * u); ctx.quadraticCurveTo(hx + 0.2 * u, hy - 2.9 * u, hx + 2.6 * u, hy - 1.2 * u);
+        ctx.quadraticCurveTo(hx + 0.2 * u, hy - 1.7 * u, hx - 2.2 * u, hy - 1.2 * u); ctx.fill();
+        ctx.fillStyle = '#f5f5f5';
+        ctx.beginPath(); ctx.arc(hx + 0.2 * u, hy - 1.95 * u, 0.32 * u, 0, Math.PI * 2); ctx.fill();
+      };
+
+      if (layer === 'back') {
+        if (fit === 'superduck') cape('#d32f2f', '#b71c1c');
+        else if (fit === 'crown') cape('#b71c1c', '#ffd54f');
+        else if (fit === 'witch') cape('#6a1b9a', '#4a148c');
+        return;
+      }
+
+      switch (fit) {
+        case 'bowtie': {
+          const bx = hx - 0.2 * u, byy = hy + 2.15 * u;
+          ctx.fillStyle = '#d32f2f';
+          ctx.beginPath(); ctx.moveTo(bx, byy); ctx.lineTo(bx - 1 * u, byy - 0.6 * u); ctx.lineTo(bx - 1 * u, byy + 0.6 * u); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(bx, byy); ctx.lineTo(bx + 1 * u, byy - 0.6 * u); ctx.lineTo(bx + 1 * u, byy + 0.6 * u); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#b71c1c'; ctx.beginPath(); ctx.arc(bx, byy, 0.3 * u, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
+        case 'cwtee':
+          bodyClip(() => {
+            ctx.fillStyle = BRAND;
+            ctx.fillRect(x - 3 * u, by - 1.6 * u, 6.5 * u, 5 * u);
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.moveTo(x - 0.6 * u, by - 0.5 * u); ctx.lineTo(x - 0.6 * u, by + 0.9 * u); ctx.lineTo(x - 0.2 * u, by + 0.5 * u); ctx.lineTo(x + 0.3 * u, by + 0.5 * u); ctx.closePath(); ctx.fill();
+          });
+          break;
+        case 'shades':
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.ellipse(hx - 0.35 * u, hy - 0.35 * u, 0.8 * u, 0.55 * u, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillRect(hx - 0.2 * u, hy - 0.62 * u, 2 * u, 0.22 * u);
+          ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(hx - 0.75 * u, hy - 0.6 * u, 0.35 * u, 0.15 * u);
+          ctx.strokeStyle = '#ffc107'; ctx.lineWidth = Math.max(1, 0.25 * u);
+          ctx.beginPath(); ctx.arc(hx + 0.2 * u, hy + 1.2 * u, 1.3 * u, 0.3, Math.PI - 0.3); ctx.stroke();
+          ctx.fillStyle = '#ffc107'; ctx.beginPath(); ctx.arc(hx + 0.2 * u, hy + 2.55 * u, 0.32 * u, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'bonnet':
+          bodyClip(() => {
+            ctx.fillStyle = '#fdd835';
+            ctx.fillRect(x - 3 * u, by - 1.9 * u, 6.5 * u, 5 * u);
+            ctx.fillStyle = '#f9a825';
+            for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x - 1.3 * u, by - 0.8 * u + i * 0.9 * u, 0.2 * u, 0, Math.PI * 2); ctx.fill(); }
+          });
+          ctx.fillStyle = '#fdd835';
+          ctx.beginPath(); ctx.arc(hx + 0.2 * u, hy - 0.3 * u, 2.2 * u, Math.PI * 0.95, Math.PI * 2.05); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hx - 1.5 * u, hy - 0.9 * u, 1.2 * u, 0.35 * u, -0.25, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'chef':
+          bodyClip(() => { ctx.fillStyle = '#fafafa'; ctx.fillRect(x - 2.4 * u, by - 1.2 * u, 2.6 * u, 4 * u); });
+          ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = Math.max(1, 0.12 * u);
+          ctx.strokeRect(x - 2.4 * u, by - 1.2 * u, 2.6 * u, 3.6 * u);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(hx - 1.2 * u, hy - 2.6 * u, 2.6 * u, 1.2 * u);
+          for (const [dx, r] of [[-0.8, 0.9], [0.1, 1.1], [1.0, 0.9]]) { ctx.beginPath(); ctx.arc(hx + dx * u, hy - 3 * u, r * u, 0, Math.PI * 2); ctx.fill(); }
+          ctx.strokeStyle = '#e0e0e0'; ctx.strokeRect(hx - 1.2 * u, hy - 2.6 * u, 2.6 * u, 1.2 * u);
+          break;
+        case 'pirate':
+          tricorn();
+          ctx.fillStyle = '#111';
+          ctx.beginPath(); ctx.ellipse(hx - 0.3 * u, hy - 0.35 * u, 0.7 * u, 0.6 * u, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1, 0.15 * u);
+          ctx.beginPath(); ctx.moveTo(hx - 0.6 * u, hy - 0.8 * u); ctx.lineTo(hx + 1.7 * u, hy - 1.3 * u); ctx.stroke();
+          break;
+        case 'superduck':
+          ctx.fillStyle = '#1565c0';
+          ctx.beginPath(); ctx.ellipse(hx - 0.3 * u, hy - 0.4 * u, 1.1 * u, 0.55 * u, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx - 0.3 * u, hy - 0.38 * u, 0.32 * u, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(hx - 0.36 * u, hy - 0.38 * u, 0.16 * u, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#ffd600';
+          ctx.beginPath(); ctx.arc(x - 0.6 * u, by + 0.2 * u, 1 * u, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#d32f2f';
+          ctx.font = `900 ${Math.max(6, 1.4 * u)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.save(); ctx.translate(x - 0.6 * u, by + 0.25 * u); ctx.scale(-1, 1); ctx.fillText('H', 0, 0); ctx.restore();
+          ctx.textBaseline = 'alphabetic';
+          break;
+        case 'gi':
+          bodyClip(() => {
+            ctx.fillStyle = '#f4f4f2';
+            ctx.fillRect(x - 3 * u, by - 1.6 * u, 6.5 * u, 5 * u);
+            ctx.strokeStyle = '#dcdcd8'; ctx.lineWidth = Math.max(1, 0.3 * u);
+            ctx.beginPath(); ctx.moveTo(x - 2 * u, by - 1.5 * u); ctx.lineTo(x - 0.2 * u, by + 0.8 * u); ctx.stroke();
+            ctx.fillStyle = '#111';
+            ctx.fillRect(x - 3 * u, by + 0.9 * u, 6.5 * u, 0.55 * u);
+          });
+          ctx.fillStyle = '#111';
+          ctx.fillRect(x - 1.1 * u, by + 1.3 * u, 0.35 * u, 1.1 * u);
+          ctx.fillRect(x - 0.6 * u, by + 1.3 * u, 0.35 * u, 0.95 * u);
+          break;
+        case 'astro':
+          ctx.fillStyle = 'rgba(179,229,252,0.35)';
+          ctx.strokeStyle = '#eceff1'; ctx.lineWidth = Math.max(1, 0.3 * u);
+          ctx.beginPath(); ctx.arc(hx - 0.4 * u, hy, 2.9 * u, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.beginPath(); ctx.ellipse(hx - 1.6 * u, hy - 1.4 * u, 0.7 * u, 0.35 * u, -0.6, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#b0bec5'; ctx.lineWidth = Math.max(1, 0.18 * u);
+          ctx.beginPath(); ctx.moveTo(hx + 0.6 * u, hy - 2.8 * u); ctx.lineTo(hx + 1 * u, hy - 4 * u); ctx.stroke();
+          ctx.fillStyle = '#ff5252'; ctx.beginPath(); ctx.arc(hx + 1 * u, hy - 4.1 * u, 0.3 * u, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'crown':
+          ctx.fillStyle = '#ffc107';
+          ctx.beginPath();
+          ctx.moveTo(hx - 1.2 * u, hy - 1.6 * u);
+          for (let i = 0; i <= 4; i++) ctx.lineTo(hx - 1.2 * u + i * 0.65 * u, hy - (i % 2 ? 2.2 : 3.1) * u);
+          ctx.lineTo(hx + 1.4 * u, hy - 1.6 * u); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(hx + 0.1 * u, hy - 2.05 * u, 0.28 * u, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'pumpkin':
+          bodyClip(() => {
+            ctx.fillStyle = '#ef6c00';
+            ctx.fillRect(x - 3 * u, by - 2.4 * u, 6.5 * u, 5.5 * u);
+            ctx.strokeStyle = '#bf360c'; ctx.lineWidth = Math.max(1, 0.2 * u);
+            for (const dx of [-1.2, 0.2, 1.6]) { ctx.beginPath(); ctx.ellipse(x + dx * u, by, 0.9 * u, 2.6 * u, 0, 0, Math.PI * 2); ctx.stroke(); }
+            ctx.fillStyle = '#212121';
+            ctx.beginPath(); ctx.moveTo(x - 1.5 * u, by - 0.4 * u); ctx.lineTo(x - 1 * u, by - 1.1 * u); ctx.lineTo(x - 0.5 * u, by - 0.4 * u); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x - 1.8 * u, by + 0.5 * u); ctx.quadraticCurveTo(x - 0.6 * u, by + 1.6 * u, x + 0.6 * u, by + 0.5 * u); ctx.lineTo(x - 0.6 * u, by + 0.9 * u); ctx.closePath(); ctx.fill();
+          });
+          ctx.fillStyle = '#558b2f';
+          ctx.fillRect(hx - 0.2 * u, hy - 2.7 * u, 0.5 * u, 0.9 * u);
+          ctx.beginPath(); ctx.ellipse(hx + 0.6 * u, hy - 2.5 * u, 0.6 * u, 0.25 * u, 0.4, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 'witch':
+          ctx.fillStyle = '#212121';
+          ctx.beginPath(); ctx.ellipse(hx + 0.1 * u, hy - 1.6 * u, 2.6 * u, 0.45 * u, -0.1, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(hx - 1.3 * u, hy - 1.7 * u); ctx.quadraticCurveTo(hx + 0.2 * u, hy - 4 * u, hx + 1.8 * u, hy - 5.2 * u);
+          ctx.quadraticCurveTo(hx + 1 * u, hy - 3.2 * u, hx + 1.4 * u, hy - 1.8 * u); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#8e24aa'; ctx.fillRect(hx - 1.1 * u, hy - 2.2 * u, 2.4 * u, 0.45 * u);
+          break;
       }
     }
 
@@ -659,6 +827,9 @@
       }
 
       const by = y0 - 4.3 * u + bob;
+      const fit = opts.fit && opts.fit !== 'plain' && !stone ? opts.fit : null;
+      const fitGeom = { x, by, hx: x - 1.1 * u, hy: by - 4.1 * u, u, t };
+      if (fit) this.drawHenryFit('back', fit, fitGeom);
       // tail tuft
       ctx.fillStyle = FLUFF;
       ctx.beginPath();
@@ -711,6 +882,7 @@
         ctx.fillStyle = '#fff';
         ctx.beginPath(); ctx.arc(hx - 0.45 * u, hy - 0.55 * u, 0.17 * u, 0, Math.PI * 2); ctx.fill();
       }
+      if (fit) this.drawHenryFit('front', fit, fitGeom);
       if (stone) {
         // Yellow rain bonnet, like every self-respecting porch goose
         ctx.fillStyle = '#fdd835';

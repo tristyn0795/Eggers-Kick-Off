@@ -437,3 +437,15 @@ test('Characters: Henry is free, equippable, and changes nothing about the kick'
   const up = { boots: 12, ball: 12 };
   assert.deepStrictEqual(P.simulateKick(4242, 90, up), P.simulateKick(4242, 90, up));
 });
+
+test("Henry's Closet: his own outfits, bought and equipped separately from Jason's", () => {
+  const C = require('../shared/catalog');
+  const p = Object.assign(C.newProfile(), { coins: 1e6, xp: 300 * 900 });
+  assert.strictEqual(p.equipped.henryfit, 'plain');
+  assert.strictEqual(C.applyPurchase(p, 'henryfit:crown'), null);
+  assert.strictEqual(p.equipped.henryfit, 'crown');
+  assert.strictEqual(p.equipped.outfit, 'gi', "Jason's outfit is untouched");
+  assert.strictEqual(C.applyEquip(p, 'henryfit', 'plain'), null);
+  assert.ok(C.isOwned(p, 'henryfit', 'crown'), 'still owned after switching');
+  assert.strictEqual(C.applyEquip(p, 'outfit', 'crown'), 'You do not own that yet', 'Henry outfits are not Jason outfits');
+});

@@ -619,3 +619,5 @@ body.theme-halloween .menu-card { box-shadow: 0 0 0 3px #ff8f00, 0 12px 40px rgb
 body.theme-halloween .hud-pill { box-shadow: 0 0 0 2px rgba(255, 143, 0, 0.75), 0 3px 10px rgba(0, 0, 0, 0.25); }
 body.theme-halloween #distance { color: #ffb74d; }
 body.theme-halloween #hint { color: #ffe0b2; }
+.grid-heading { grid-column: 1 / -1; margin: 14px 0 0; font-size: 17px; }
+.grid-heading small { display: block; font-size: 12px; font-weight: 700; margin-top: 2px; }

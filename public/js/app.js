@@ -1223,19 +1223,18 @@
           <div><div class="name">${m.secret && !have.has(m.id) ? '❓ Secret milestone' : esc(m.name)}</div><div class="desc">${esc(m.secret && !have.has(m.id) ? m.secret : m.desc)}</div></div></div>
           <div class="ms-reward">${have.has(m.id) ? '✓ Claimed' : `Reward 🪙 ${fmt(m.reward)}`}</div></div>`).join('');
     } else {
-      const list = C.SLOTS[S.shopTab];
       const eq = Object.assign({}, C.DEFAULT_EQUIPPED, prof.equipped);
       // Limited-time seasonal gear comes first while its season is on.
       const seasonal = (it) => (it.season && C.seasonActive(it.season) ? 0 : 1);
-      grid.innerHTML = list.slice()
-        .filter((it) => !it.season || C.seasonActive(it.season) || C.isOwned(prof, S.shopTab, it.id))
+      const cards = (slot) => C.SLOTS[slot].slice()
+        .filter((it) => !it.season || C.seasonActive(it.season) || C.isOwned(prof, slot, it.id))
         .sort((a, b) => seasonal(a) - seasonal(b) || a.level - b.level).map((it) => {
-        const key = `${S.shopTab}:${it.id}`;
-        const owned = C.isOwned(prof, S.shopTab, it.id);
-        const isEq = eq[S.shopTab] === it.id;
+        const key = `${slot}:${it.id}`;
+        const owned = C.isOwned(prof, slot, it.id);
+        const isEq = eq[slot] === it.id;
         let btn;
         if (isEq) btn = '<button class="owned" disabled>✓ Equipped</button>';
-        else if (owned) btn = `<button class="owned" data-equip="${S.shopTab}:${it.id}">Equip</button>`;
+        else if (owned) btn = `<button class="owned" data-equip="${slot}:${it.id}">Equip</button>`;
         else if (it.career) btn = '<button disabled>🏆 Go PRO in Career</button>';
         else if (it.prestige) btn = `<button disabled>⭐ Prestige ${it.prestige}</button>`;
         else if (level < it.level) btn = `<button disabled>🔒 Level ${it.level}</button>`;
@@ -1243,10 +1242,15 @@
         const season = it.season && C.SEASONS[it.season];
         const tag = season ? `<span class="season-tag" title="Limited edition: buy it during ${esc(season.name)}, keep it forever">${season.icon} Limited</span>` : '';
         const desc = it.desc ? `<div class="desc">${esc(it.desc)}</div>` : '';
-        return `<div class="item ${isEq ? 'equipped' : ''} ${season ? 'seasonal' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div><div class="name">${esc(it.name)}${tag}</div>${desc}</div></div>${btn}</div>`;
+        return `<div class="item ${isEq ? 'equipped' : ''} ${season ? 'seasonal' : ''}"><div class="top">${itemIcon(slot, it)}<div><div class="name">${esc(it.name)}${tag}</div>${desc}</div></div>${btn}</div>`;
       }).join('');
+      grid.innerHTML = cards(S.shopTab);
+      if (S.shopTab === 'character') {
+        // Henry's Closet lives with the characters.
+        grid.insertAdjacentHTML('beforeend', `<h3 class="grid-heading">🪿 Henry's Closet <small class="muted">Outfits only Henry wears${eq.character === 'henry' ? '' : ' (pick Henry above to see them on him)'}</small></h3>${cards('henryfit')}`);
+      }
       if (S.shopTab === 'outfit' && eq.character === 'henry') {
-        grid.insertAdjacentHTML('afterbegin', '<div class="season-banner henry-note">🪿 You\'re playing as <b>Henry</b>. Outfits are worn by Jason: switch back in <b>Characters</b> to show them off. Your ball and trail work for both.</div>');
+        grid.insertAdjacentHTML('afterbegin', '<div class="season-banner henry-note">🪿 You\'re playing as <b>Henry</b>. These outfits are Jason\'s. Henry has his own in <b>🪿 Characters → Henry\'s Closet</b>. Your ball and trail work for both.</div>');
       }
       const live = Object.values(C.SEASONS).find((x) => C.seasonActive(x.id));
       if (live && S.shopTab !== 'upgrades') {
@@ -1260,7 +1264,10 @@
     if (!eq) return '';
     const parts = [];
     const henry = eq.character === 'henry';
-    if (henry) parts.push('🪿 Henry');
+    if (henry) {
+      const fit = C.HENRY_OUTFITS.find((x) => x.id === eq.henryfit);
+      parts.push(fit && fit.id !== 'plain' ? `🪿 Henry (${esc(fit.name)})` : '🪿 Henry');
+    }
     for (const slot of ['outfit', 'ball', 'trail']) {
       if (slot === 'outfit' && henry) continue; // Henry doesn't wear Jason's outfits
       const it = (C.SLOTS[slot] || []).find((x) => x.id === eq[slot]);
@@ -1273,6 +1280,7 @@
 
   function itemIcon(slot, it) {
     if (slot === 'character') return `<span class="icon" style="background:${it.id === 'henry' ? '#fff3e0' : '#1c1c1e'}">${it.id === 'henry' ? '🪿' : '🥋'}</span>`;
+    if (slot === 'henryfit') return `<span class="icon" style="background:#fff3e0">${it.icon || '🪿'}</span>`;
     if (slot === 'outfit') {
       const special = { astro: '🧑‍🚀', suit: '👔', pumpkintee: '🎃', skeleton: '💀', vampire: '🧛', wizard: '🧙', hockey: '🏒', cultist: '🕯️', pirate: '🏴‍☠️' };
       return `<span class="icon" style="background:${it.shirt}">${special[it.id] || (it.pattern === 'gi' ? '🥋' : '👕')}</span>`;

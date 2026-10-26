@@ -157,9 +157,27 @@
     { id: 'henry', name: 'Henry the Duck', cost: 0, level: 1, desc: 'Small duck, big boots. Same kick, same upgrades, just closer to the ground.' },
   ];
 
-  const SLOTS = { outfit: OUTFITS, ball: BALLS, trail: TRAILS, character: CHARACTERS };
+  // Henry's Closet: outfits only Henry wears (Jason keeps his own outfits).
+  const HENRY_OUTFITS = [
+    { id: 'plain', name: 'Just Henry', cost: 0, level: 1, icon: '🪿', desc: 'Fluffy, as nature intended.' },
+    { id: 'bowtie', name: 'Dapper Bow Tie', cost: 600, level: 2, icon: '🎀', desc: 'A red bow tie for a well-dressed duck.' },
+    { id: 'cwtee', name: 'Click Wise Duck Tee', cost: 1200, level: 3, icon: '👕', desc: 'Team colours, duck-sized.' },
+    { id: 'shades', name: 'Cool Shades & Chain', cost: 2500, level: 5, icon: '😎', desc: 'Too cool for the pond.' },
+    { id: 'bonnet', name: 'Porch Goose Rain Bonnet', cost: 4000, level: 6, icon: '🌂', desc: 'Yellow bonnet and raincoat, porch-goose approved.' },
+    { id: 'chef', name: 'Chef Henry', cost: 6000, level: 8, icon: '👨‍🍳', desc: 'Tall hat, clean apron, zero cooking skills.' },
+    { id: 'pirate', name: 'Captain Quack', cost: 9000, level: 11, icon: '🏴‍☠️', desc: 'Tricorn and eyepatch. Arr-quack.' },
+    { id: 'superduck', name: 'Super Duck', cost: 14000, level: 14, icon: '🦸', desc: 'Cape, mask and a big H on the chest.' },
+    { id: 'gi', name: "Henry's Black Belt Gi", cost: 18000, level: 16, icon: '🥋', desc: "Matching Jason's gi, with a tiny black belt." },
+    { id: 'astro', name: 'Astro-Duck', cost: 30000, level: 20, icon: '🧑‍🚀', desc: 'Bubble helmet for kicks into orbit.' },
+    { id: 'crown', name: 'King of the Pond', cost: 60000, level: 28, icon: '👑', desc: 'Gold crown and a royal red cape.' },
+    // 🎃 Spooky Season (limited; never remove or rename these, owners keep them forever)
+    { id: 'pumpkin', name: 'Pumpkin Duck', cost: 3000, level: 3, season: 'halloween', icon: '🎃', desc: 'A pumpkin costume with a jack-o\'-lantern grin.' },
+    { id: 'witch', name: 'Witchy Henry', cost: 5000, level: 4, season: 'halloween', icon: '🧙', desc: "Pointy hat and a purple cape (as seen in the Crystal Ball)." },
+  ];
 
-  const DEFAULT_EQUIPPED = { outfit: 'gi', ball: 'classic', trail: 'none', character: 'jason' };
+  const SLOTS = { outfit: OUTFITS, ball: BALLS, trail: TRAILS, character: CHARACTERS, henryfit: HENRY_OUTFITS };
+
+  const DEFAULT_EQUIPPED = { outfit: 'gi', ball: 'classic', trail: 'none', character: 'jason', henryfit: 'plain' };
   const DEFAULT_OWNED = ['outfit:gi', 'outfit:tee', 'ball:classic', 'trail:none'];
 
   /** Free items are always owned, so new free gear reaches existing players too. */
@@ -527,7 +545,7 @@
   }
 
   return {
-    UPGRADES, UPGRADE_LEVEL_REQ, MAX_UPGRADE, UPGRADE_BASE, UPGRADE_GROWTH, OUTFITS, BALLS, TRAILS, CHARACTERS, SLOTS, MILESTONES,
+    UPGRADES, UPGRADE_LEVEL_REQ, MAX_UPGRADE, UPGRADE_BASE, UPGRADE_GROWTH, OUTFITS, BALLS, TRAILS, CHARACTERS, HENRY_OUTFITS, SLOTS, MILESTONES,
     DEFAULT_EQUIPPED, DEFAULT_OWNED, isOwned,
     ROUND_COMPLETION_COINS, POINTS_PER_COIN, FREE_KICK_POINTS_PER_COIN, DAILY_BONUS_PER_DAY, DAILY_BONUS_MAX_DAYS,
     levelFromXp, xpForLevel, coinsForKick, coinsForRound, levelUpCoins, levelUpBonus,
