@@ -186,8 +186,9 @@
       this.drawObjects();
       this.drawMarkers();
       if (st.henryBuddy && this.visible(-1.6, 200)) this.drawHenry(this.sx(-1.3), this.groundY, Math.max(0.75 * this.scale, 20), { happy: false });
-      if (st.jason) this.drawJason(st.jason);
-      if (st.showSweet && st.jason) this.drawSweetSpot(st);
+      if (st.henry) this.drawHenryPlayer(st.henry);
+      else if (st.jason) this.drawJason(st.jason);
+      if (st.showSweet && (st.jason || st.henry)) this.drawSweetSpot(st);
       if (st.trail && st.power) this.drawPowerTrail(st.trail, st.power, st.time, st.powerSkin);
       else if (st.trail) this.drawTrail(st.trail, st.time);
       if (st.ball && st.ball.visible && st.golden) this.drawGoldenGlow(st.ball.x, st.ball.y, st.time);
@@ -596,6 +597,27 @@
       this.drawHenry(x + 22 * s, gy, Math.max(6 * this.scale, 40), { label: true, happy: this.henryHappy, stone: this.henryStone });
     }
 
+    /** Playing as Henry: the duck faces the field, hops, and flying-kicks the ball. */
+    drawHenryPlayer(p) {
+      const ctx = this.ctx;
+      const X = this.sx(0.08);
+      if (X < -200 || X > this.W + 200) return;
+      const H = 0.95 * this.scale; // a little under a metre tall
+      ctx.save();
+      ctx.translate(X, 0); ctx.scale(-1, 1); ctx.translate(-X, 0);
+      this.drawHenry(X, this.groundY, H, { happy: p.cheer, lift: p.lift * this.scale, kick: p.kick });
+      ctx.restore();
+      if (p.nameTag) {
+        ctx.font = `800 ${Math.max(11, 0.12 * this.scale)}px system-ui`;
+        ctx.textAlign = 'center';
+        const ty = this.groundY - H * 1.15 - p.lift * this.scale;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillText('HENRY', X + 1, ty + 1);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('HENRY', X, ty);
+      }
+    }
+
     /** Henry: fluffy white duckling, big black eye, orange beak and webbed feet. Faces left. */
     drawHenry(x, gy, h, opts) {
       opts = opts || {};
@@ -606,7 +628,8 @@
       const stone = !!opts.stone;
       const hop = opts.happy && !stone ? Math.abs(Math.sin(t * 9)) * 1.6 * u : 0;
       const bob = stone ? 0 : Math.sin(t * 2.6) * 0.12 * u;
-      const y0 = gy - hop;
+      const y0 = gy - hop - (opts.lift || 0);
+      const kick = opts.kick || 0;
       const ORANGE = stone ? '#9e9e9e' : '#ff8a1c', ORANGE_DARK = stone ? '#7d7d7d' : '#e8700a';
       const FLUFF = stone ? '#bdbdbd' : '#fffaf0', SHADE = stone ? '#a6a6a6' : '#f1e8d8';
 
@@ -614,8 +637,13 @@
       ctx.fillStyle = 'rgba(0,0,0,0.15)';
       ctx.beginPath(); ctx.ellipse(x, gy + 1, 3.2 * u, 0.5 * u, 0, 0, Math.PI * 2); ctx.fill();
 
-      // legs + webbed feet
+      // legs + webbed feet (the front leg swings forward for a kick)
       for (const [fx, shade] of [[x + 1.1 * u, true], [x - 0.9 * u, false]]) {
+        const a = shade ? -kick * 0.35 : kick * 1.35;
+        ctx.save();
+        ctx.translate(fx, y0 - 2.2 * u);
+        ctx.rotate(a);
+        ctx.translate(-fx, -(y0 - 2.2 * u));
         ctx.strokeStyle = shade ? ORANGE_DARK : ORANGE;
         ctx.lineWidth = Math.max(1.5, 0.45 * u);
         ctx.lineCap = 'round';
@@ -627,6 +655,7 @@
         ctx.quadraticCurveTo(fx - 0.6 * u, y0 + 0.35 * u, fx + 0.5 * u, y0);
         ctx.closePath();
         ctx.fill();
+        ctx.restore();
       }
 
       const by = y0 - 4.3 * u + bob;
@@ -1887,10 +1916,11 @@
 
     drawSweetSpot(st) {
       const ctx = this.ctx;
-      const y = this.sy(P.SWEET_SPOT);
-      const band = Math.max(3, st.sweetWidth * 0.35 * this.scale);
+      const ys = st.yScale || 1; // Henry juggles at duck height
+      const y = this.sy(P.SWEET_SPOT * ys);
+      const band = Math.max(3, st.sweetWidth * 0.35 * ys * this.scale);
       const x0 = this.sx(0.2), x1 = this.sx(1.05);
-      const hot = st.ball && Math.abs(st.ball.y - P.SWEET_SPOT) < st.sweetWidth * 0.35;
+      const hot = st.ball && Math.abs(st.ball.y - P.SWEET_SPOT * ys) < st.sweetWidth * 0.35 * ys;
       ctx.fillStyle = hot ? 'rgba(76,175,80,0.35)' : 'rgba(255,255,255,0.18)';
       ctx.fillRect(x0, y - band, x1 - x0, band * 2);
       ctx.setLineDash([6, 6]);
@@ -1903,7 +1933,7 @@
       ctx.fillStyle = hot ? '#1b5e20' : 'rgba(255,255,255,0.85)';
       ctx.fillText('SWEET SPOT', x1 + 6, y + 4);
       // Out-of-reach line
-      const ry = this.sy(2.5);
+      const ry = this.sy(2.5 * ys);
       ctx.strokeStyle = 'rgba(229,57,53,0.35)';
       ctx.setLineDash([3, 6]);
       ctx.beginPath(); ctx.moveTo(x0, ry); ctx.lineTo(x1, ry); ctx.stroke();

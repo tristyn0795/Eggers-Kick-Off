@@ -1,6 +1,22 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.10.0',
+    date: '26 Oct 2026',
+    title: 'Play as Henry! 🪿',
+    sections: [
+      {
+        heading: '🪿 New: play as Henry the Duck',
+        items: [
+          'Pick your kicker in Locker → 🪿 Characters. Henry is free for everyone, and you can switch back to Jason any time.',
+          'Henry juggles at duck height (the sweet spot moves down to his level) and leaps into a flying kick to meet the ball.',
+          'He uses all of your upgrades, balls and trails, with exactly the same timing, distances and scores as Jason, so the leaderboards stay fair.',
+          "Outfits are Jason's: they come back when you switch to him. Leaderboard rows and replays show who each kicker plays as.",
+        ],
+      },
+    ],
+  },
+  {
     version: '1.9.0',
     date: '20 Oct 2026',
     title: 'Spooky gear drop & critters 👁️🔮🐍',

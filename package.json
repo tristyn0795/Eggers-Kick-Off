@@ -1,6 +1,6 @@
 {
   "name": "eggers-kick-off",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Eggers Kick Off — a multiplayer kick-for-distance game starring Jason, aiming for the Click Wise Design office.",
   "main": "src/server.js",
   "directories": {

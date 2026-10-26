@@ -25,6 +25,9 @@
   }
   const HIP_Y_WORLD = 0.95;
 
+  const HENRY_SCALE = 0.45; // Henry juggles at 45% of Jason's heights
+  const HENRY_BLEND = 25;   // flight frames over which the ball eases up to its real path
+
   class Game {
     constructor(canvas, hud) {
       this.canvas = canvas;
@@ -385,6 +388,47 @@
       return this.ballPosAt(k.pathPos);
     }
 
+    // ---- Henry -------------------------------------------------------------
+    // Henry is a look, not a different kicker: the juggle, timing and flight are Jason's exactly.
+    // While he juggles, ball heights are drawn at duck scale; after the kick the ball eases back
+    // up to its real path over the first few frames of flight.
+    henryDrop(pathPos) {
+      const k = this.k;
+      const c = k && k.sim ? k.sim.contactHeight : 0;
+      return c * (1 - HENRY_SCALE) * Math.max(0, 1 - pathPos / HENRY_BLEND);
+    }
+
+    henryBall(phys) {
+      const k = this.k;
+      if (k.phase === 'juggle' || k.phase === 'swing') return { x: phys.x, y: phys.y * HENRY_SCALE };
+      return { x: phys.x, y: Math.max(0, phys.y - this.henryDrop(k.pathPos || 0)) };
+    }
+
+    henryPose(phys) {
+      const k = this.k;
+      const pose = { lift: 0, kick: 0, cheer: false, nameTag: this.mode !== 'play' || (k.index === 0 && k.phase === 'juggle') };
+      if (k.phase === 'juggle' || (k.phase === 'swing' && k.swingT === 0)) {
+        // A little hop as the ball drops to his feet
+        const l = ease(clamp(1 - (phys.y - P.JUGGLE_FLOOR) / 0.6, 0, 1));
+        pose.lift = 0.05 * l;
+        pose.kick = 0.45 * l;
+        return pose;
+      }
+      // Flying kick: jump up to meet the ball at its (duck-scale) contact height.
+      const reach = Math.max(0, (k.sim ? k.sim.contactHeight : 1.4) * HENRY_SCALE - 0.32);
+      if (k.phase === 'swing') {
+        const p = clamp((k.swingT + this.acc / DT) / P.SWING_FRAMES, 0, 1);
+        pose.lift = reach * ease(p);
+        pose.kick = p;
+        return pose;
+      }
+      const t = clamp(k.followT / 26, 0, 1);
+      pose.lift = reach * (1 - t) * (1 - t);
+      pose.kick = 1 - ease(t);
+      if (k.phase === 'result' && k.sim && !k.sim.whiff && (k.sim.quality > 0.8 || k.sim.target)) pose.cheer = true;
+      return pose;
+    }
+
     // ---- Poses ------------------------------------------------------------
     jasonPose(ball) {
       const k = this.k;
@@ -476,7 +520,10 @@
     render(dt) {
       const k = this.k;
       const r = this.r;
-      const ball = this.ballPos();
+      const phys = this.ballPos();
+      // Playing as Henry: the same physics, drawn at duck height (see henryBall).
+      const henry = !!(this.cfg && this.cfg.equipped && this.cfg.equipped.character === 'henry');
+      const ball = henry ? this.henryBall(phys) : phys;
       const inAir = k.phase === 'flight' || k.phase === 'landed' || k.phase === 'result' || k.phase === 'error';
       const js = r.juggleScale();
       let targetScale = js;
@@ -503,6 +550,9 @@
         const end = Math.floor(k.pathPos);
         const start = Math.max(0, end - 70);
         trail = k.sim.path.slice(start * 2, end * 2);
+        if (henry && start < HENRY_BLEND) {
+          for (let i = 0; i < trail.length; i += 2) trail[i + 1] -= this.henryDrop(start + i / 2);
+        }
       }
 
       // Split Shot: the second ball after the split.
@@ -540,12 +590,14 @@
         critter: restTarget && restT != null ? { x: ball.x, name: restTarget.name, t: restT } : null,
         ball2,
         trail2,
-        jason: this.jasonPose(ball),
+        jason: henry ? null : this.jasonPose(phys),
+        henry: henry ? this.henryPose(phys) : null,
+        yScale: henry ? HENRY_SCALE : 1,
         showSweet: (k.phase === 'juggle' || k.phase === 'swing') && this.mode !== 'attract',
         golden: k.golden && this.mode === 'play',
         power: k.power || null,
         henryHappy: k.phase === 'result' && !!k.henryHappy && !henryStone,
-        henryBuddy: this.mode === 'attract',
+        henryBuddy: this.mode === 'attract' && !henry,
         sweetWidth: k.st.sweetWidth,
         trail,
       });

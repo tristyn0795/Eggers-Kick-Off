@@ -151,9 +151,15 @@
     { id: 'p200', name: 'Kick Off Veteran', desc: 'Finish 200 rounds', reward: 10000, rounds: 200 },
   ];
 
-  const SLOTS = { outfit: OUTFITS, ball: BALLS, trail: TRAILS };
+  // Who you play as. Purely a look: every character kicks with exactly the same physics and upgrades.
+  const CHARACTERS = [
+    { id: 'jason', name: 'Jason', cost: 0, level: 1, desc: 'The Eggers original. Wears every outfit in the Locker.' },
+    { id: 'henry', name: 'Henry the Duck', cost: 0, level: 1, desc: 'Small duck, big boots. Same kick, same upgrades, just closer to the ground.' },
+  ];
 
-  const DEFAULT_EQUIPPED = { outfit: 'gi', ball: 'classic', trail: 'none' };
+  const SLOTS = { outfit: OUTFITS, ball: BALLS, trail: TRAILS, character: CHARACTERS };
+
+  const DEFAULT_EQUIPPED = { outfit: 'gi', ball: 'classic', trail: 'none', character: 'jason' };
   const DEFAULT_OWNED = ['outfit:gi', 'outfit:tee', 'ball:classic', 'trail:none'];
 
   /** Free items are always owned, so new free gear reaches existing players too. */
@@ -521,7 +527,7 @@
   }
 
   return {
-    UPGRADES, UPGRADE_LEVEL_REQ, MAX_UPGRADE, UPGRADE_BASE, UPGRADE_GROWTH, OUTFITS, BALLS, TRAILS, SLOTS, MILESTONES,
+    UPGRADES, UPGRADE_LEVEL_REQ, MAX_UPGRADE, UPGRADE_BASE, UPGRADE_GROWTH, OUTFITS, BALLS, TRAILS, CHARACTERS, SLOTS, MILESTONES,
     DEFAULT_EQUIPPED, DEFAULT_OWNED, isOwned,
     ROUND_COMPLETION_COINS, POINTS_PER_COIN, FREE_KICK_POINTS_PER_COIN, DAILY_BONUS_PER_DAY, DAILY_BONUS_MAX_DAYS,
     levelFromXp, xpForLevel, coinsForKick, coinsForRound, levelUpCoins, levelUpBonus,

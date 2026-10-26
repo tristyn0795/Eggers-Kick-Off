@@ -1242,8 +1242,12 @@
         else btn = `<button data-buy="${key}" ${prof.coins < it.cost ? 'disabled' : ''}>Buy · 🪙 ${fmt(it.cost)}</button>`;
         const season = it.season && C.SEASONS[it.season];
         const tag = season ? `<span class="season-tag" title="Limited edition: buy it during ${esc(season.name)}, keep it forever">${season.icon} Limited</span>` : '';
-        return `<div class="item ${isEq ? 'equipped' : ''} ${season ? 'seasonal' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div class="name">${esc(it.name)}${tag}</div></div>${btn}</div>`;
+        const desc = it.desc ? `<div class="desc">${esc(it.desc)}</div>` : '';
+        return `<div class="item ${isEq ? 'equipped' : ''} ${season ? 'seasonal' : ''}"><div class="top">${itemIcon(S.shopTab, it)}<div><div class="name">${esc(it.name)}${tag}</div>${desc}</div></div>${btn}</div>`;
       }).join('');
+      if (S.shopTab === 'outfit' && eq.character === 'henry') {
+        grid.insertAdjacentHTML('afterbegin', '<div class="season-banner henry-note">🪿 You\'re playing as <b>Henry</b>. Outfits are worn by Jason: switch back in <b>Characters</b> to show them off. Your ball and trail work for both.</div>');
+      }
       const live = Object.values(C.SEASONS).find((x) => C.seasonActive(x.id));
       if (live && S.shopTab !== 'upgrades') {
         grid.insertAdjacentHTML('afterbegin', `<div class="season-banner">${live.icon} <b>${esc(live.name)}</b> is here! Limited gear is in the shop until ${live.to[1]} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][live.to[0] - 1]}. Whatever you buy is yours to keep.</div>`);
@@ -1255,7 +1259,10 @@
   function gearLine(eq) {
     if (!eq) return '';
     const parts = [];
+    const henry = eq.character === 'henry';
+    if (henry) parts.push('🪿 Henry');
     for (const slot of ['outfit', 'ball', 'trail']) {
+      if (slot === 'outfit' && henry) continue; // Henry doesn't wear Jason's outfits
       const it = (C.SLOTS[slot] || []).find((x) => x.id === eq[slot]);
       if (!it || (slot === 'trail' && it.id === 'none')) continue;
       const icon = itemIcon(slot, it).replace(/<[^>]+>/g, '');
@@ -1265,6 +1272,7 @@
   }
 
   function itemIcon(slot, it) {
+    if (slot === 'character') return `<span class="icon" style="background:${it.id === 'henry' ? '#fff3e0' : '#1c1c1e'}">${it.id === 'henry' ? '🪿' : '🥋'}</span>`;
     if (slot === 'outfit') {
       const special = { astro: '🧑‍🚀', suit: '👔', pumpkintee: '🎃', skeleton: '💀', vampire: '🧛', wizard: '🧙', hockey: '🏒', cultist: '🕯️', pirate: '🏴‍☠️' };
       return `<span class="icon" style="background:${it.shirt}">${special[it.id] || (it.pattern === 'gi' ? '🥋' : '👕')}</span>`;

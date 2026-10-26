@@ -424,3 +424,16 @@ test('Porch Goose: a Medusa Ball stopped at the Duck Pond turns Henry to stone (
   assert.ok(!C.checkMilestones(elsewhere, { kick: { target: { name: 'Car Park', ring: 'BULLSEYE', points: 30 }, label: 'GOOD', distance: 400 } }).some((m) => m.id === 'porchgoose'));
   assert.ok(C.MILESTONES.find((m) => m.id === 'porchgoose').secret, 'stays hidden until found');
 });
+
+test('Characters: Henry is free, equippable, and changes nothing about the kick', () => {
+  const C = require('../shared/catalog');
+  const p = C.newProfile();
+  assert.strictEqual(p.equipped.character, 'jason');
+  assert.ok(C.isOwned(p, 'character', 'henry'));
+  assert.strictEqual(C.applyEquip(p, 'character', 'henry'), null);
+  assert.strictEqual(p.equipped.character, 'henry');
+  assert.strictEqual(C.applyEquip(p, 'character', 'goose'), 'You do not own that yet');
+  // Physics never looks at the character: same seed, frame and upgrades give the same kick.
+  const up = { boots: 12, ball: 12 };
+  assert.deepStrictEqual(P.simulateKick(4242, 90, up), P.simulateKick(4242, 90, up));
+});
