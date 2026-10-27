@@ -1,6 +1,22 @@
 /* Patch notes shown to players in-game. Newest first. Bump `version` with every release. */
 window.EK_PATCH_NOTES = [
   {
+    version: '1.11.1',
+    date: '27 Oct 2026',
+    title: 'Roomier juggling for Henry 🪿',
+    sections: [
+      {
+        heading: '🔧 Henry fixes',
+        items: [
+          'The SWEET SPOT and TOO HIGH lines no longer bunch up when you play as Henry, on phones, tablets and desktop.',
+          'The camera moves in a little closer while Henry juggles, and the ball pops a bit higher so he leaps up to meet it. He is still a small duck next to Jason.',
+          'The lines now start past his beak, so they never cross his head or name tag.',
+          'Timing is unchanged: the same PERFECT kicks, distances and scores as Jason.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.11.0',
     date: '26 Oct 2026',
     title: "Henry's Closet 🪿👑",

@@ -2089,9 +2089,11 @@
     drawSweetSpot(st) {
       const ctx = this.ctx;
       const ys = st.yScale || 1; // Henry juggles at duck height
+      const henry = ys < 1;
       const y = this.sy(P.SWEET_SPOT * ys);
       const band = Math.max(3, st.sweetWidth * 0.35 * ys * this.scale);
-      const x0 = this.sx(0.2), x1 = this.sx(1.05);
+      // Henry's lines start past his beak so they never cross his head or name tag.
+      const x0 = this.sx(henry ? 0.42 : 0.2), x1 = this.sx(henry ? 1.15 : 1.05);
       const hot = st.ball && Math.abs(st.ball.y - P.SWEET_SPOT * ys) < st.sweetWidth * 0.35 * ys;
       ctx.fillStyle = hot ? 'rgba(76,175,80,0.35)' : 'rgba(255,255,255,0.18)';
       ctx.fillRect(x0, y - band, x1 - x0, band * 2);
@@ -2100,18 +2102,21 @@
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.font = 'bold 11px system-ui';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = hot ? '#1b5e20' : 'rgba(255,255,255,0.85)';
-      ctx.fillText('SWEET SPOT', x1 + 6, y + 4);
       // Out-of-reach line
       const ry = this.sy(2.5 * ys);
       ctx.strokeStyle = 'rgba(229,57,53,0.35)';
       ctx.setLineDash([3, 6]);
       ctx.beginPath(); ctx.moveTo(x0, ry); ctx.lineTo(x1, ry); ctx.stroke();
       ctx.setLineDash([]);
+      // Labels: keep them at least 20px apart however close the lines are drawn.
+      const sweetLabelY = y + 4;
+      const highLabelY = Math.min(ry + 4, sweetLabelY - Math.max(20, band + 14));
+      ctx.font = 'bold 11px system-ui';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = hot ? '#1b5e20' : 'rgba(255,255,255,0.85)';
+      ctx.fillText('SWEET SPOT', x1 + 6, sweetLabelY);
       ctx.fillStyle = 'rgba(229,57,53,0.6)';
-      ctx.fillText('TOO HIGH', x1 + 6, ry + 4);
+      ctx.fillText('TOO HIGH', x1 + 6, highLabelY);
     }
 
     // ---- Ball + trail -----------------------------------------------------

@@ -25,8 +25,9 @@
   }
   const HIP_Y_WORLD = 0.95;
 
-  const HENRY_SCALE = 0.45; // Henry juggles at 45% of Jason's heights
+  const HENRY_SCALE = 0.6;  // Henry's juggle is drawn at 60% of Jason's heights (he leaps to meet the ball)
   const HENRY_BLEND = 25;   // flight frames over which the ball eases up to its real path
+  const HENRY_ZOOM = 1.25;  // camera zoom while Henry juggles (he still looks smaller than Jason)
 
   class Game {
     constructor(canvas, hud) {
@@ -173,8 +174,25 @@
 
     snapCamera() {
       this.camX = P.BALL_X;
-      this.scale = this.r.juggleScale();
+      this.scale = this.homeScale();
       this.anchor = 0.42;
+    }
+
+    get henry() {
+      return !!(this.cfg && this.cfg.equipped && this.cfg.equipped.character === 'henry');
+    }
+
+    /**
+     * Camera zoom while juggling. Henry's juggle is drawn at duck height, so zoom in to give his
+     * sweet-spot and too-high lines room, but keep him smaller on screen than Jason.
+     */
+    homeScale() {
+      const r = this.r;
+      const js = r.juggleScale();
+      if (!this.henry) return js;
+      // Henry's too-high line (2.5 m × duck scale) plus his name tag must clear the HUD.
+      const room = r.groundY - (r.W < 600 ? 170 : 150);
+      return Math.min(js * HENRY_ZOOM, room / (2.5 * HENRY_SCALE + 0.35));
     }
 
     input() {
@@ -525,7 +543,7 @@
       const henry = !!(this.cfg && this.cfg.equipped && this.cfg.equipped.character === 'henry');
       const ball = henry ? this.henryBall(phys) : phys;
       const inAir = k.phase === 'flight' || k.phase === 'landed' || k.phase === 'result' || k.phase === 'error';
-      const js = r.juggleScale();
+      const js = this.homeScale();
       let targetScale = js;
       let targetAnchor = this.mode === 'attract' && r.W >= 700 ? 0.3 : r.W < 600 ? 0.5 : 0.42;
       if (inAir) {
