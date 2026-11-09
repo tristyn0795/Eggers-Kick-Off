@@ -144,6 +144,7 @@ src/store.js        Postgres store with JSON-file fallback
 src/moderation.js   name/chat word filter (players can also report & block)
 scripts/build-app.js  bundles the game for the iOS/Android app shells
 store/              app store prep kit (see store/README.md)
+CLAUDE.md           project notes for Claude Code (architecture, rules, how to ship)
 public/js/render.js canvas renderer (Jason, field, targets, landmarks, office)
 public/js/game.js   game loop & kick state machine
 public/js/app.js    menus, shop, leaderboard, rooms, online/offline profiles
